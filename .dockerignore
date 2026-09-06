@@ -1,0 +1,26 @@
+# Build context sent to the daemon. Smaller context = faster builds.
+# `src` is included — the image compiles TypeScript in the `build` stage.
+
+node_modules
+dist
+coverage
+.git
+.github
+.cursor
+.vscode
+.idea
+*.md
+test
+ansible
+ansible.cfg
+Jenkinsfile
+eslint.config.cjs
+.prettierrc
+.prettierignore
+.editorconfig
+.gitattributes
+*.log
+npm-debug.log*
+.env
+.env.*
+!.env.example

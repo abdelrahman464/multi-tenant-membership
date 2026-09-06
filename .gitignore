@@ -1,0 +1,49 @@
+# compiled output
+/dist
+/node_modules
+/coverage
+*.tsbuildinfo
+
+# logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# env — never commit secrets. Templates (*.example) are committed.
+.env
+.env.development
+.env.test
+.env.production
+.env.local
+.env.*.local
+
+# Ansible may drop a real env file on the deploy host copy; keep it out of git.
+ansible/files/.env
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDEs
+.idea/
+.project
+.classpath
+.c9/
+*.launch
+.settings/
+*.sublime-workspace
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# runtime
+.temp
+.tmp
+pids/
+*.pid
+*.seed
+*.pid.lock

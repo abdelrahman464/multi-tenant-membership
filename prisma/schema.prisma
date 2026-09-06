@@ -1,0 +1,63 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum TenantStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+enum CountryCode {
+  EG
+  SA
+}
+
+/// The tenant business account.
+model Tenant {
+  id        String          @id @default(uuid()) @db.Uuid
+  slug      String          @unique
+  name      String
+  country   CountryCode     @default(EG)
+  timezone  String
+  currency  String          @db.VarChar(3)
+  status    TenantStatus    @default(ACTIVE)
+  createdAt DateTime        @default(now()) @map("created_at")
+  updatedAt DateTime        @updatedAt @map("updated_at")
+  settings  TenantSettings?
+  branches  Branch[]
+
+  @@map("tenants")
+}
+
+/// Stored now; freeze/grace are NOT enforced until a later phase.
+/// One freeze policy for both time subscriptions and session packs.
+model TenantSettings {
+  tenantId             String   @id @map("tenant_id") @db.Uuid
+  tenant               Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  graceEnabled         Boolean  @default(false) @map("grace_enabled")
+  graceDays            Int      @default(0) @map("grace_days")
+  freezeEnabled        Boolean  @default(false) @map("freeze_enabled")
+  maxFreezeDays        Int      @default(0) @map("max_freeze_days")
+  maxFreezeDaysPerYear Int      @default(0) @map("max_freeze_days_per_year")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  @@map("tenant_settings")
+}
+
+model Branch {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name      String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+  @@map("branches")
+}

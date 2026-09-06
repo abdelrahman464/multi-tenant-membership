@@ -1,0 +1,47 @@
+---
+# Jenkins already cloned GitHub. This playbook only replaces the running stack.
+# Never use `down -v` here — that would delete the Postgres volume (member data).
+
+- name: Replace running containers with a new build
+  hosts: localhost
+  connection: local
+  become: true
+  gather_facts: false
+
+  vars:
+    compose_dir: "{{ playbook_dir }}/.."
+
+  tasks:
+    - name: Show current containers
+      ansible.builtin.command:
+        argv: [docker, compose, --profile, app, ps, -a]
+        chdir: "{{ compose_dir }}"
+      register: current
+      changed_when: false
+      ignore_errors: true
+
+    - name: Log current containers
+      ansible.builtin.debug:
+        msg: "{{ current.stdout | default('(none running)') }}"
+
+    - name: Stop and remove containers if they exist (keep volumes)
+      ansible.builtin.command:
+        argv: [docker, compose, --profile, app, down, --remove-orphans]
+        chdir: "{{ compose_dir }}"
+      ignore_errors: true
+
+    - name: Build new images
+      ansible.builtin.command:
+        argv: [docker, compose, --profile, app, build]
+        chdir: "{{ compose_dir }}"
+
+    - name: Start containers
+      ansible.builtin.command:
+        argv: [docker, compose, --profile, app, up, -d]
+        chdir: "{{ compose_dir }}"
+
+    - name: Remove dangling images from the old build
+      ansible.builtin.command:
+        argv: [docker, image, prune, -f]
+      changed_when: false
+      ignore_errors: true
