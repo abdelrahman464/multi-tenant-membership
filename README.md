@@ -2,7 +2,7 @@
 
 Staff-only B2B API for gyms and academies. One Postgres database, many tenants (businesses), branches as locations. Isolation is `tenant_id` plus **row-level security (RLS)**.
 
-**Phase 2 (current):** platform operators create tenants (with the first owner). Staff log in with JWT access tokens and Redis refresh sessions. `tenant_id` comes from the token, never from the client body.
+**Phase 3 (current):** staff manage members for their gym. Phone is unique per tenant (E.164). There is no member login.
 
 | | |
 |---|---|
@@ -102,10 +102,16 @@ Roles: `TENANT_OWNER`, `ADMIN`, `BRANCH_STAFF`. Role is loaded from the database
 | DELETE | `/api/v1/auth/sessions/:sid` | Any staff |
 | PATCH | `/api/v1/auth/changePassword` | Any staff |
 | GET | `/api/v1/branches` | Owner, admin (`search`, `sort`, `page`, `limit`) |
-| GET | `/api/v1/staff` | Owner, admin |
+| GET | `/api/v1/staff` | Owner, admin (`search`, `role`, `branchId`, `sort`, `page`, `limit`) |
 | POST | `/api/v1/staff` | Owner (admin or branch staff); admin (branch staff only) |
+| GET | `/api/v1/members` | Any staff (`search`, `status`, `homeBranchId`, `sort`, `page`, `limit`) |
+| POST | `/api/v1/members` | Any staff |
+| GET | `/api/v1/members/:id` | Any staff |
+| PATCH | `/api/v1/members/:id` | Any staff |
 
 `BRANCH_STAFF` must be assigned a `branchId` in this tenant. Admins are not assigned to one branch. Nobody can create a second `TENANT_OWNER` through the API.
+
+Member `phone` must be E.164 (`+201001234567`). The same number may exist in two gyms. `homeBranchId` must be a branch of the staff’s tenant. `tenant_id` is never accepted from the body.
 
 ---
 
@@ -157,4 +163,4 @@ The API image runs `prisma migrate deploy` then `node dist/main.js`. Jenkins tag
 
 ## Next
 
-**Phase 3 — Members:** tenant-scoped members, phone unique per tenant (E.164), no member login.
+**Phase 4 — Plans:** duration and/or session packs; plans may apply to all branches or a selected set.

@@ -4,6 +4,7 @@ import { AppHttpException } from '../../common/errors/app-http.exception';
 import { HashService } from '../../common/security/hash.service';
 import { AuthenticatedUser } from '../../common/types/authenticated-user.type';
 import { CreateStaffDto } from './dto/create-staff.dto';
+import { ListStaffQueryDto } from './dto/list-staff-query.dto';
 import { AssignableStaffRole, StaffRole } from './enums/staff-role.enum';
 import { StaffRepository } from './repository/staff.repository';
 
@@ -14,8 +15,8 @@ export class StaffService {
     private readonly hashService: HashService,
   ) {}
 
-  list(actor: AuthenticatedUser) {
-    return this.staffRepository.findMany(actor.tenantId);
+  list(actor: AuthenticatedUser, query: ListStaffQueryDto) {
+    return this.staffRepository.findMany(actor.tenantId, query);
   }
 
   async create(actor: AuthenticatedUser, dto: CreateStaffDto) {

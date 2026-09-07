@@ -2,7 +2,7 @@
   "name": "membership-api",
   "version": "0.1.0",
   "private": true,
-  "description": "Staff-facing multi-tenant membership API. Phase 2: JWT staff auth, Redis refresh, tenant RLS.",
+  "description": "Staff-facing multi-tenant membership API. Phase 3: tenant members, E.164 phone, staff JWT.",
   "engines": {
     "node": ">=22.12.0"
   },

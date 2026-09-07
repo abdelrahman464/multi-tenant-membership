@@ -8,3 +8,13 @@ export const STAFF_PUBLIC_SELECT = {
   createdAt: true,
   updatedAt: true,
 } as const;
+
+export const STAFF_SEARCH_FIELDS = ['name', 'email'] as const;
+export const STAFF_FILTER_FIELDS = ['role', 'branchId'] as const;
+export const STAFF_SORT_FIELDS = [
+  'createdAt',
+  'updatedAt',
+  'name',
+  'email',
+  'role',
+] as const;

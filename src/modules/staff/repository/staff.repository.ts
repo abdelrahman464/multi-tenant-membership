@@ -1,9 +1,17 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { ErrorCode } from '../../../common/constants/error-codes';
 import { AppHttpException } from '../../../common/errors/app-http.exception';
+import { ApiFeatures } from '../../../common/utils/api-features.utils';
 import { PrismaService } from '../../../database/prisma.service';
-import { STAFF_PUBLIC_SELECT } from '../constants/staff.constants';
+import {
+  STAFF_FILTER_FIELDS,
+  STAFF_PUBLIC_SELECT,
+  STAFF_SEARCH_FIELDS,
+  STAFF_SORT_FIELDS,
+} from '../constants/staff.constants';
 import { CreateStaffDto } from '../dto/create-staff.dto';
+import { ListStaffQueryDto } from '../dto/list-staff-query.dto';
 
 @Injectable()
 export class StaffRepository {
@@ -43,14 +51,34 @@ export class StaffRepository {
     );
   }
 
-  findMany(tenantId: string) {
-    return this.prisma.withTenant(tenantId, (tx) =>
-      tx.staff.findMany({
-        where: { tenantId },
-        select: STAFF_PUBLIC_SELECT,
-        orderBy: { createdAt: 'asc' },
-      }),
-    );
+  findMany(tenantId: string, query: ListStaffQueryDto) {
+    const features = new ApiFeatures(
+      query as unknown as Record<string, unknown>,
+    )
+      .filter(STAFF_FILTER_FIELDS)
+      .search(STAFF_SEARCH_FIELDS)
+      .sort(STAFF_SORT_FIELDS)
+      .paginate();
+
+    const { where, orderBy, skip, take } = features.args();
+    const scopedWhere: Prisma.StaffWhereInput = {
+      ...(where as Prisma.StaffWhereInput),
+      tenantId,
+    };
+
+    return this.prisma.withTenant(tenantId, async (tx) => {
+      const [data, total] = await Promise.all([
+        tx.staff.findMany({
+          where: scopedWhere,
+          orderBy: orderBy as Prisma.StaffOrderByWithRelationInput[],
+          skip,
+          take,
+          select: STAFF_PUBLIC_SELECT,
+        }),
+        tx.staff.count({ where: scopedWhere }),
+      ]);
+      return features.paginateResult(data, total);
+    });
   }
 
   async create(tenantId: string, data: CreateStaffDto) {

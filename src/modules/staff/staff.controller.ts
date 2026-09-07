@@ -5,11 +5,13 @@ import {
   HttpCode,
   HttpStatus,
   Post,
+  Query,
 } from '@nestjs/common';
 import { GetAuthUser } from '../../common/decorators/get-auth-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { AuthenticatedUser } from '../../common/types/authenticated-user.type';
 import { CreateStaffDto } from './dto/create-staff.dto';
+import { ListStaffQueryDto } from './dto/list-staff-query.dto';
 import { StaffRole } from './enums/staff-role.enum';
 import { StaffService } from './staff.service';
 
@@ -19,8 +21,11 @@ export class StaffController {
 
   @Get()
   @Roles(StaffRole.TENANT_OWNER, StaffRole.ADMIN)
-  list(@GetAuthUser() actor: AuthenticatedUser) {
-    return this.staffService.list(actor);
+  list(
+    @GetAuthUser() actor: AuthenticatedUser,
+    @Query() query: ListStaffQueryDto,
+  ) {
+    return this.staffService.list(actor, query);
   }
 
   @Post()

@@ -36,6 +36,7 @@ model Tenant {
   settings  TenantSettings?
   branches  Branch[]
   staff     Staff[]
+  members   Member[]
 
   @@map("tenants")
 }
@@ -64,7 +65,8 @@ model Branch {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  staff Staff[]
+  staff   Staff[]
+  members Member[]
 
   @@unique([tenantId, name])
   @@index([tenantId])
@@ -89,4 +91,30 @@ model Staff {
   @@unique([tenantId, email])
   @@index([tenantId])
   @@map("staff")
+}
+
+enum MemberStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+/// Gym member. No login in v1. Phone is unique per tenant (E.164).
+model Member {
+  id           String       @id @default(uuid()) @db.Uuid
+  tenantId     String       @map("tenant_id") @db.Uuid
+  tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  homeBranchId String       @map("home_branch_id") @db.Uuid
+  homeBranch   Branch       @relation(fields: [homeBranchId], references: [id], onDelete: Restrict)
+  name         String
+  phone        String
+  email        String?
+  notes        String?
+  status       MemberStatus @default(ACTIVE)
+  createdAt    DateTime     @default(now()) @map("created_at")
+  updatedAt    DateTime     @updatedAt @map("updated_at")
+
+  @@unique([tenantId, phone])
+  @@index([tenantId])
+  @@index([homeBranchId])
+  @@map("members")
 }

@@ -12,6 +12,7 @@ import { RolesGuard } from './common/guards/roles.guard';
 import { PrismaModule } from './database/prisma.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { HealthModule } from './modules/health/health.module';
+import { MembersModule } from './modules/members/members.module';
 import { StaffModule } from './modules/staff/staff.module';
 import { TenantsModule } from './modules/tenants/tenants.module';
 import { RedisModule } from './redis/redis.module';
@@ -32,6 +33,7 @@ import { RedisModule } from './redis/redis.module';
     HealthModule,
     TenantsModule,
     StaffModule,
+    MembersModule,
     AuthModule,
   ],
   providers: [

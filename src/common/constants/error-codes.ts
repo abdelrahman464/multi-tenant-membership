@@ -22,6 +22,8 @@ export const ErrorCode = {
   BRANCH_REQUIRED: 'BRANCH_REQUIRED',
   BRANCH_NOT_ALLOWED: 'BRANCH_NOT_ALLOWED',
   WRONG_CURRENT_PASSWORD: 'WRONG_CURRENT_PASSWORD',
+  MEMBER_NOT_FOUND: 'MEMBER_NOT_FOUND',
+  MEMBER_PHONE_TAKEN: 'MEMBER_PHONE_TAKEN',
 } as const;
 
 export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode];
