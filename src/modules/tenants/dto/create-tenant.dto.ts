@@ -9,6 +9,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { CreateBranchDto } from './create-branch.dto';
+import { FirstOwnerDto } from './first-owner.dto';
 
 export class CreateTenantDto {
   @IsString()
@@ -30,6 +31,11 @@ export class CreateTenantDto {
   @ValidateNested()
   @Type(() => CreateBranchDto)
   firstBranch!: CreateBranchDto;
+
+  @IsDefined()
+  @ValidateNested()
+  @Type(() => FirstOwnerDto)
+  firstOwner!: FirstOwnerDto;
 }
 
 /** HTTP body plus country defaults. Used only when writing to Postgres. */
@@ -37,6 +43,7 @@ export class PersistTenantDto {
   name!: string;
   slug!: string;
   firstBranch!: CreateBranchDto;
+  firstOwner!: { name: string; email: string; password: string };
   timezone!: string;
   currency!: string;
 }

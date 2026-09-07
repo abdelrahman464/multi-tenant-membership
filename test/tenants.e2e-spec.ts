@@ -37,6 +37,11 @@ describe('Platform tenants (e2e)', () => {
         name: 'Delta',
         slug: 'delta-wrong-key',
         firstBranch: { name: 'Maadi' },
+        firstOwner: {
+          name: 'Owner',
+          email: 'owner-wrong-key@example.com',
+          password: 'Password1!',
+        },
       })
       .expect(401);
 
@@ -62,6 +67,11 @@ describe('Platform tenants (e2e)', () => {
         name: 'Delta Swim',
         slug: slugA,
         firstBranch: { name: 'Maadi' },
+        firstOwner: {
+          name: 'Owner A',
+          email: `owner-a-${suffix}@example.com`,
+          password: 'Password1!',
+        },
       })
       .expect(201);
 
@@ -77,6 +87,11 @@ describe('Platform tenants (e2e)', () => {
         name: 'Delta Swim',
         slug: slugA,
         firstBranch: { name: 'Other' },
+        firstOwner: {
+          name: 'Owner A2',
+          email: `owner-a2-${suffix}@example.com`,
+          password: 'Password1!',
+        },
       })
       .expect(201);
 
@@ -89,6 +104,11 @@ describe('Platform tenants (e2e)', () => {
         name: 'Cairo Boxing',
         slug: slugB,
         firstBranch: { name: 'Nasr City' },
+        firstOwner: {
+          name: 'Owner B',
+          email: `owner-b-${suffix}@example.com`,
+          password: 'Password1!',
+        },
       })
       .expect(201);
 

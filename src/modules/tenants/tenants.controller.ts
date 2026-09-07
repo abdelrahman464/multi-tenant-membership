@@ -11,6 +11,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
+import { Public } from '../../common/decorators/public.decorator';
 import { PlatformKeyGuard } from '../../common/guards/platform-key.guard';
 import { ParseUuidPipe } from '../../common/pipes/parse-uuid.pipe';
 import { CreateBranchDto } from './dto/create-branch.dto';
@@ -20,6 +21,7 @@ import { UpdateTenantDto } from './dto/update-tenant.dto';
 import { TenantsService } from './tenants.service';
 
 @Controller('platform/tenants')
+@Public()
 @UseGuards(PlatformKeyGuard)
 export class TenantsController {
   constructor(private readonly tenantsService: TenantsService) {}
@@ -41,10 +43,7 @@ export class TenantsController {
   }
 
   @Patch(':id')
-  update(
-    @Param('id', ParseUuidPipe) id: string,
-    @Body() dto: UpdateTenantDto,
-  ) {
+  update(@Param('id', ParseUuidPipe) id: string, @Body() dto: UpdateTenantDto) {
     return this.tenantsService.update(id, dto);
   }
 

@@ -5,13 +5,17 @@ import { ApiFeatures } from '../../../common/utils/api-features.utils';
 import { TenantStatus } from '../enums/tenant-status.enum';
 import { AppHttpException } from '../../../common/errors/app-http.exception';
 import { PrismaService } from '../../../database/prisma.service';
+import { STAFF_PUBLIC_SELECT } from '../../staff/constants/staff.constants';
 import {
+  BRANCH_SEARCH_FIELDS,
+  BRANCH_SORT_FIELDS,
   TENANT_FILTER_FIELDS,
   TENANT_SEARCH_FIELDS,
   TENANT_SORT_FIELDS,
 } from '../constants/tenant.constants';
 import { CreateBranchDto } from '../dto/create-branch.dto';
 import { PersistTenantDto } from '../dto/create-tenant.dto';
+import { ListBranchesQueryDto } from '../dto/list-branches-query.dto';
 import { ListTenantsQueryDto } from '../dto/list-tenants-query.dto';
 
 @Injectable()
@@ -19,15 +23,27 @@ export class TenantsRepository {
   constructor(private readonly prisma: PrismaService) {}
 
   createWithFirstBranch(dto: PersistTenantDto) {
-    const { firstBranch, ...tenant } = dto;
+    const { firstBranch, firstOwner, ...tenant } = dto;
     return this.prisma.withPlatform((tx) =>
       tx.tenant.create({
         data: {
           ...tenant,
           settings: { create: {} },
           branches: { create: firstBranch },
+          staff: {
+            create: {
+              name: firstOwner.name,
+              email: firstOwner.email,
+              password: firstOwner.password,
+              role: 'TENANT_OWNER',
+            },
+          },
         },
-        include: { settings: true, branches: true },
+        include: {
+          settings: true,
+          branches: true,
+          staff: { select: STAFF_PUBLIC_SELECT },
+        },
       }),
     );
   }
@@ -117,6 +133,40 @@ export class TenantsRepository {
         data: { tenantId, ...dto },
       }),
     );
+  }
+
+  findBranchesByTenant(tenantId: string, query: ListBranchesQueryDto) {
+    const features = new ApiFeatures(
+      query as unknown as Record<string, unknown>,
+    )
+      .search(BRANCH_SEARCH_FIELDS)
+      .sort(BRANCH_SORT_FIELDS)
+      .paginate();
+
+    const { where, orderBy, skip, take } = features.args();
+    const scopedWhere: Prisma.BranchWhereInput = {
+      ...(where as Prisma.BranchWhereInput),
+      tenantId,
+    };
+
+    return this.prisma.withTenant(tenantId, async (tx) => {
+      const [data, total] = await Promise.all([
+        tx.branch.findMany({
+          where: scopedWhere,
+          orderBy: orderBy as Prisma.BranchOrderByWithRelationInput[],
+          skip,
+          take,
+          select: {
+            id: true,
+            tenantId: true,
+            name: true,
+            createdAt: true,
+          },
+        }),
+        tx.branch.count({ where: scopedWhere }),
+      ]);
+      return features.paginateResult(data, total);
+    });
   }
 
   isUniqueConflict(error: unknown): boolean {

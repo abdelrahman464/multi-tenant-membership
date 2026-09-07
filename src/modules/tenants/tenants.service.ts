@@ -7,13 +7,18 @@ import { AppHttpException } from '../../common/errors/app-http.exception';
 import { generateUniqueSlug } from '../../common/utils/slug.util';
 import { CreateBranchDto } from './dto/create-branch.dto';
 import { CreateTenantDto } from './dto/create-tenant.dto';
+import { ListBranchesQueryDto } from './dto/list-branches-query.dto';
 import { ListTenantsQueryDto } from './dto/list-tenants-query.dto';
 import { UpdateTenantDto } from './dto/update-tenant.dto';
+import { HashService } from '../../common/security/hash.service';
 import { TenantsRepository } from './repository/tenants.repository';
 
 @Injectable()
 export class TenantsService {
-  constructor(private readonly tenantsRepository: TenantsRepository) {}
+  constructor(
+    private readonly tenantsRepository: TenantsRepository,
+    private readonly hashService: HashService,
+  ) {}
 
   async create(dto: CreateTenantDto) {
     const name = dto.name.trim();
@@ -29,6 +34,11 @@ export class TenantsService {
         name,
         slug,
         firstBranch: { name: branchName },
+        firstOwner: {
+          name: dto.firstOwner.name.trim(),
+          email: dto.firstOwner.email,
+          password: await this.hashService.hash(dto.firstOwner.password),
+        },
         timezone,
         currency,
       });
@@ -58,13 +68,6 @@ export class TenantsService {
 
   async suspend(id: string) {
     const tenant = await this.getById(id);
-    if (!tenant) {
-      throw new AppHttpException(
-        HttpStatus.NOT_FOUND,
-        ErrorCode.TENANT_NOT_FOUND,
-        'Tenant not found',
-      );
-    }
     if (tenant.status === TenantStatus.SUSPENDED) {
       throw new AppHttpException(
         HttpStatus.CONFLICT,
@@ -118,6 +121,10 @@ export class TenantsService {
   async remove(id: string) {
     await this.getById(id);
     await this.tenantsRepository.delete(id);
+  }
+
+  listBranches(tenantId: string, query: ListBranchesQueryDto) {
+    return this.tenantsRepository.findBranchesByTenant(tenantId, query);
   }
 
   async addBranch(tenantId: string, dto: CreateBranchDto) {

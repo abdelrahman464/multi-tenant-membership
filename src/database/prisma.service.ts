@@ -70,7 +70,7 @@ export class PrismaService
   }
 
   /**
-   * Staff-shaped access (Phase 2 will pass JWT tenant_id).
+   * Staff-shaped access. Pass tenant_id from the JWT only — never from the body.
    * RLS then hides every row whose tenant_id does not match.
    */
   withTenant<T>(

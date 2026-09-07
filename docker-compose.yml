@@ -67,6 +67,11 @@ services:
       DATABASE_URL: postgresql://membership_app:${POSTGRES_PASSWORD:-multitenant}@postgres:5432/${POSTGRES_DB:-multitenant_membership}?schema=public
       MIGRATE_DATABASE_URL: postgresql://${POSTGRES_USER:-multitenant}:${POSTGRES_PASSWORD:-multitenant}@postgres:5432/${POSTGRES_DB:-multitenant_membership}?schema=public
       REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET:-change-me-access-secret}
+      JWT_EXPIRE: ${JWT_EXPIRE:-15m}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-change-me-refresh-secret}
+      JWT_REFRESH_EXPIRE: ${JWT_REFRESH_EXPIRE:-30d}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
     depends_on:
       postgres:
         condition: service_healthy

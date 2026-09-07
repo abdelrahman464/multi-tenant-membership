@@ -16,6 +16,12 @@ enum CountryCode {
   SA
 }
 
+enum StaffRole {
+  TENANT_OWNER
+  ADMIN
+  BRANCH_STAFF
+}
+
 /// The tenant business account.
 model Tenant {
   id        String          @id @default(uuid()) @db.Uuid
@@ -29,6 +35,7 @@ model Tenant {
   updatedAt DateTime        @updatedAt @map("updated_at")
   settings  TenantSettings?
   branches  Branch[]
+  staff     Staff[]
 
   @@map("tenants")
 }
@@ -57,7 +64,29 @@ model Branch {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
+  staff Staff[]
+
   @@unique([tenantId, name])
   @@index([tenantId])
   @@map("branches")
+}
+
+/// Gym staff. Email is unique per tenant (login also needs the tenant slug).
+model Staff {
+  id             String    @id @default(uuid()) @db.Uuid
+  tenantId       String    @map("tenant_id") @db.Uuid
+  tenant         Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branchId       String?   @map("branch_id") @db.Uuid
+  branch         Branch?   @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  name           String
+  email          String
+  password       String
+  role           StaffRole
+  sessionVersion Int       @default(0) @map("session_version")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
+  @@map("staff")
 }

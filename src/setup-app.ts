@@ -1,6 +1,7 @@
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestExpressApplication } from '@nestjs/platform-express';
+import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import { API_PREFIX } from './common/constants/api.constants';
 import { AllExceptionsFilter } from './common/http/all-exceptions.filter';
@@ -21,6 +22,7 @@ export function configureApp(
   }
 
   app.use(helmet());
+  app.use(cookieParser());
   app.useGlobalFilters(new AllExceptionsFilter());
   app.useGlobalPipes(
     new ValidationPipe({
