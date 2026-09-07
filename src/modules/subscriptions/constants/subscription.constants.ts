@@ -11,5 +11,12 @@ export const SUBSCRIPTION_SORT_FIELDS = [
 ] as const;
 
 export const SUBSCRIPTION_INCLUDE = {
-  tenant: { select: { currency: true } },
+  tenant: {
+    select: {
+      currency: true,
+      settings: {
+        select: { graceEnabled: true, graceDays: true },
+      },
+    },
+  },
 } as const;

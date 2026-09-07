@@ -2,7 +2,7 @@
 
 Staff-only B2B API for gyms and academies. One Postgres database, many tenants (businesses), branches as locations. Isolation is `tenant_id` plus **row-level security (RLS)**.
 
-**Phase 5 (current):** staff sell a plan to a member. Every plan has a duration. Session packs are optional. Each plan sets how many visits are allowed per day. Daily cap and remaining sessions are stored on the subscription; check-in enforces them later.
+**Phase 6 (current):** staff configure freeze and grace for the gym, pause a subscription (calendar stops), unfreeze, and renew. Check-in still does not run these rules at the door.
 
 | | |
 |---|---|
@@ -115,6 +115,11 @@ Roles: `TENANT_OWNER`, `ADMIN`, `BRANCH_STAFF`. Role is loaded from the database
 | GET | `/api/v1/subscriptions` | Any staff (`memberId`, `planId`, `status`, `sort`, `page`, `limit`) |
 | POST | `/api/v1/subscriptions` | Any staff (`memberId` + `planId`) |
 | GET | `/api/v1/subscriptions/:id` | Any staff |
+| POST | `/api/v1/subscriptions/:id/freeze` | Any staff (`{ days }`) |
+| POST | `/api/v1/subscriptions/:id/unfreeze` | Any staff |
+| POST | `/api/v1/subscriptions/:id/renew` | Any staff |
+| GET | `/api/v1/settings` | Any staff |
+| PATCH | `/api/v1/settings` | Owner, admin |
 
 `BRANCH_STAFF` must be assigned a `branchId` in this tenant. Admins are not assigned to one branch. Nobody can create a second `TENANT_OWNER` through the API.
 
@@ -123,6 +128,8 @@ Member `phone` must be E.164 (`+201001234567`). The same number may exist in two
 A plan always has `durationDays`. `sessionCount` is optional (8 sessions in 30 days). `maxVisitsPerDay` is 1 or 2 in typical gyms (default 1): how many times the member may check in on one calendar day. `allBranches: true` (default) means every location; `false` requires `branchIds` in this tenant. `GET /plans?branchId=` returns all-location plans plus selected plans that include that branch. Member home branch is not the plan’s allowed branches. Price is major units of the tenant currency (EGP), not a Stripe amount. Desk staff can list plans and subscribe members but cannot create or edit plans.
 
 Subscribing snapshots the sold terms (`durationDays`, `sessionCount`, `sessionsRemaining`, `maxVisitsPerDay`, `price`, `planName`). A member may hold more than one subscription. Archived members and archived plans cannot be sold. Daily visit limits and pack decrements are not enforced until check-in.
+
+Freeze and grace are one policy for time plans and packs (`GET`/`PATCH /settings`). `freezeEnabled` is the master switch. `maxFreezeDays` is per freeze; `maxFreezeDaysPerYear` is a rolling year. Freezing pushes `endsAt` by `days`; unfreezing early gives unused days back. A scheduled freeze that reaches `freezeEndsAt` is settled back to `ACTIVE` on the next read. Renew is allowed only after `endsAt` (the paid period has ended, including during grace). It creates a **new** subscription for the same member and plan with a fresh session pack. Leftover sessions stay on the old row. `accessUntil` is `endsAt` plus `graceDays` when grace is on (computed in the subscription mapper). Grace does not block the door yet — that is check-in.
 
 ---
 
@@ -157,7 +164,7 @@ npx prisma generate                        # TypeScript client only — does not
 - Gym-owned rows carry `tenant_id`. RLS + `FORCE` hide other gyms even from the table owner.
 - Session: `app.platform=on` (platform routes) or `app.tenant_id=<uuid>` (staff JWT). Set with `SET LOCAL` inside a transaction so pooled connections cannot leak.
 
-Freeze/grace columns on `tenant_settings` are stored only. One freeze policy covers time plans and session packs. Not enforced until a later phase.
+One freeze policy on `tenant_settings` covers time plans and session packs. Staff update it via `/settings`. Freeze/renew change the subscription calendar now. Grace is exposed as `accessUntil` / `inGrace`; the door still does not enforce it.
 
 ---
 
@@ -174,4 +181,4 @@ The API image runs `prisma migrate deploy` then `node dist/main.js`. Jenkins tag
 
 ## Next
 
-**Phase 6 — Freeze / renew / grace:** pause a subscription under tenant freeze settings.
+**Phase 7 — Expiry:** mark or settle subscriptions that have passed `accessUntil`.

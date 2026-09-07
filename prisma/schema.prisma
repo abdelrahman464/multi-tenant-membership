@@ -40,12 +40,12 @@ model Tenant {
   plans          Plan[]
   planBranches   PlanBranch[]
   subscriptions  Subscription[]
+  freezes        SubscriptionFreeze[]
 
   @@map("tenants")
 }
 
-/// Stored now; freeze/grace are NOT enforced until a later phase.
-/// One freeze policy for both time subscriptions and session packs.
+/// Gym-wide freeze and grace policy. One freeze policy for time plans and packs.
 model TenantSettings {
   tenantId             String   @id @map("tenant_id") @db.Uuid
   tenant               Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -173,6 +173,7 @@ model PlanBranch {
 
 enum SubscriptionStatus {
   ACTIVE
+  FROZEN
   CANCELLED
 }
 
@@ -195,12 +196,34 @@ model Subscription {
   allBranches       Boolean            @map("all_branches")
   startsAt          DateTime           @map("starts_at")
   endsAt            DateTime           @map("ends_at")
+  frozenAt          DateTime?          @map("frozen_at")
+  freezeEndsAt      DateTime?          @map("freeze_ends_at")
   status            SubscriptionStatus @default(ACTIVE)
   createdAt         DateTime           @default(now()) @map("created_at")
   updatedAt         DateTime           @updatedAt @map("updated_at")
+
+  freezes SubscriptionFreeze[]
 
   @@index([tenantId])
   @@index([memberId])
   @@index([planId])
   @@map("subscriptions")
+}
+
+/// One freeze episode. days is what staff requested. unfrozenAt is null while open.
+model SubscriptionFreeze {
+  id             String       @id @default(uuid()) @db.Uuid
+  tenantId       String       @map("tenant_id") @db.Uuid
+  tenant         Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  subscriptionId String       @map("subscription_id") @db.Uuid
+  subscription   Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  days           Int
+  startedAt      DateTime     @map("started_at")
+  endedAt        DateTime     @map("ended_at")
+  unfrozenAt     DateTime?    @map("unfrozen_at")
+  createdAt      DateTime     @default(now()) @map("created_at")
+
+  @@index([tenantId])
+  @@index([subscriptionId])
+  @@map("subscription_freezes")
 }

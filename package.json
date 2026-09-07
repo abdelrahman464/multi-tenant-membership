@@ -2,7 +2,7 @@
   "name": "membership-api",
   "version": "0.1.0",
   "private": true,
-  "description": "Staff-facing multi-tenant membership API. Phase 5: subscribe a member to a plan (duration required, optional pack, daily visit cap).",
+  "description": "Staff-facing multi-tenant membership API. Phase 6: freeze, unfreeze, renew, and gym freeze/grace settings.",
   "engines": {
     "node": ">=22.12.0"
   },

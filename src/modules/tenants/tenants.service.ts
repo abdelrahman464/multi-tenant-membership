@@ -10,6 +10,7 @@ import { CreateTenantDto } from './dto/create-tenant.dto';
 import { ListBranchesQueryDto } from './dto/list-branches-query.dto';
 import { ListTenantsQueryDto } from './dto/list-tenants-query.dto';
 import { UpdateTenantDto } from './dto/update-tenant.dto';
+import { UpdateTenantSettingsDto } from './dto/update-tenant-settings.dto';
 import { HashService } from '../../common/security/hash.service';
 import { TenantsRepository } from './repository/tenants.repository';
 
@@ -121,6 +122,42 @@ export class TenantsService {
   async remove(id: string) {
     await this.getById(id);
     await this.tenantsRepository.delete(id);
+  }
+
+  getSettings(tenantId: string) {
+    return this.tenantsRepository.findSettings(tenantId);
+  }
+
+  async updateSettings(tenantId: string, dto: UpdateTenantSettingsDto) {
+    const current = await this.tenantsRepository.findSettings(tenantId);
+    const graceEnabled = dto.graceEnabled ?? current.graceEnabled;
+    const graceDays = dto.graceDays ?? current.graceDays;
+    if (graceEnabled && graceDays < 1) {
+      throw new AppHttpException(
+        HttpStatus.BAD_REQUEST,
+        ErrorCode.GRACE_DAYS_REQUIRED,
+        'Grace days must be at least 1 when grace is enabled',
+      );
+    }
+    const freezeEnabled = dto.freezeEnabled ?? current.freezeEnabled;
+    const maxFreezeDays = dto.maxFreezeDays ?? current.maxFreezeDays;
+    const maxFreezeDaysPerYear =
+      dto.maxFreezeDaysPerYear ?? current.maxFreezeDaysPerYear;
+    if (freezeEnabled && maxFreezeDays < 1) {
+      throw new AppHttpException(
+        HttpStatus.BAD_REQUEST,
+        ErrorCode.MAX_FREEZE_DAYS_REQUIRED,
+        'Max freeze days must be at least 1 when freeze is enabled',
+      );
+    }
+    if (freezeEnabled && maxFreezeDaysPerYear < 1) {
+      throw new AppHttpException(
+        HttpStatus.BAD_REQUEST,
+        ErrorCode.MAX_FREEZE_DAYS_PER_YEAR_REQUIRED,
+        'Max freeze days per year must be at least 1 when freeze is enabled',
+      );
+    }
+    return this.tenantsRepository.updateSettings(tenantId, dto);
   }
 
   listBranches(tenantId: string, query: ListBranchesQueryDto) {

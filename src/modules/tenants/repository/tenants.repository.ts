@@ -17,6 +17,8 @@ import { CreateBranchDto } from '../dto/create-branch.dto';
 import { PersistTenantDto } from '../dto/create-tenant.dto';
 import { ListBranchesQueryDto } from '../dto/list-branches-query.dto';
 import { ListTenantsQueryDto } from '../dto/list-tenants-query.dto';
+import { UpdateTenantSettingsDto } from '../dto/update-tenant-settings.dto';
+import { SETTINGS_PUBLIC_SELECT } from '../constants/settings.constants';
 
 @Injectable()
 export class TenantsRepository {
@@ -131,6 +133,28 @@ export class TenantsRepository {
     return this.prisma.withPlatform((tx) =>
       tx.branch.create({
         data: { tenantId, ...dto },
+      }),
+    );
+  }
+
+  findSettings(tenantId: string) {
+    return this.prisma.withTenant(tenantId, (tx) =>
+      tx.tenantSettings.upsert({
+        where: { tenantId },
+        create: { tenantId },
+        update: {},
+        select: SETTINGS_PUBLIC_SELECT,
+      }),
+    );
+  }
+
+  updateSettings(tenantId: string, data: UpdateTenantSettingsDto) {
+    return this.prisma.withTenant(tenantId, (tx) =>
+      tx.tenantSettings.upsert({
+        where: { tenantId },
+        create: { tenantId, ...data },
+        update: data,
+        select: SETTINGS_PUBLIC_SELECT,
       }),
     );
   }
