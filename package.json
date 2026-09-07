@@ -2,7 +2,7 @@
   "name": "membership-api",
   "version": "0.1.0",
   "private": true,
-  "description": "Staff-facing multi-tenant membership API. Phase 3: tenant members, E.164 phone, staff JWT.",
+  "description": "Staff-facing multi-tenant membership API. Phase 5: subscribe a member to a plan (duration required, optional pack, daily visit cap).",
   "engines": {
     "node": ">=22.12.0"
   },
