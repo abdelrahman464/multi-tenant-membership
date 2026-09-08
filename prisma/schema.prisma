@@ -41,6 +41,8 @@ model Tenant {
   planBranches   PlanBranch[]
   subscriptions  Subscription[]
   freezes        SubscriptionFreeze[]
+  notifications  Notification[]
+  checkIns       CheckIn[]
 
   @@map("tenants")
 }
@@ -71,6 +73,7 @@ model Branch {
   staff        Staff[]
   members      Member[]
   planBranches PlanBranch[]
+  checkIns     CheckIn[]
 
   @@unique([tenantId, name])
   @@index([tenantId])
@@ -91,6 +94,7 @@ model Staff {
   sessionVersion Int       @default(0) @map("session_version")
   createdAt      DateTime  @default(now()) @map("created_at")
   updatedAt      DateTime  @updatedAt @map("updated_at")
+  checkIns       CheckIn[]
 
   @@unique([tenantId, email])
   @@index([tenantId])
@@ -117,6 +121,8 @@ model Member {
   createdAt    DateTime     @default(now()) @map("created_at")
   updatedAt    DateTime     @updatedAt @map("updated_at")
   subscriptions Subscription[]
+  notifications Notification[]
+  checkIns      CheckIn[]
 
   @@unique([tenantId, phone])
   @@index([tenantId])
@@ -174,11 +180,13 @@ model PlanBranch {
 enum SubscriptionStatus {
   ACTIVE
   FROZEN
+  IN_GRACE
+  EXPIRED
   CANCELLED
 }
 
 /// A member's purchased plan. Terms are snapshotted at join time.
-/// Daily visit cap and remaining sessions are stored now; check-in enforces them later.
+/// EXPIRED at endsAt. IN_GRACE only after a check-in during the extra days.
 model Subscription {
   id                String             @id @default(uuid()) @db.Uuid
   tenantId          String             @map("tenant_id") @db.Uuid
@@ -198,11 +206,18 @@ model Subscription {
   endsAt            DateTime           @map("ends_at")
   frozenAt          DateTime?          @map("frozen_at")
   freezeEndsAt      DateTime?          @map("freeze_ends_at")
+  expiredAt         DateTime?          @map("expired_at")
+  /// Set on the first grace check-in. This sold plan never gets a second window.
+  graceUsedAt       DateTime?          @map("grace_used_at")
+  /// accessUntil at the moment grace was used. Later settings changes do not move it.
+  graceEndsAt       DateTime?          @map("grace_ends_at")
   status            SubscriptionStatus @default(ACTIVE)
   createdAt         DateTime           @default(now()) @map("created_at")
   updatedAt         DateTime           @updatedAt @map("updated_at")
 
-  freezes SubscriptionFreeze[]
+  freezes       SubscriptionFreeze[]
+  notifications Notification[]
+  checkIns      CheckIn[]
 
   @@index([tenantId])
   @@index([memberId])
@@ -226,4 +241,55 @@ model SubscriptionFreeze {
   @@index([tenantId])
   @@index([subscriptionId])
   @@map("subscription_freezes")
+}
+
+enum NotificationType {
+  SUBSCRIPTION_IN_GRACE
+  SUBSCRIPTION_EXPIRED
+}
+
+/// Gym inbox row. One per (type, subscription) so settle/sweep never spam.
+/// IN_GRACE is written at check-in (Phase 9), not when the calendar enters grace.
+/// readAt is shared: the desk is one team, not a per-person bell.
+model Notification {
+  id             String           @id @default(uuid()) @db.Uuid
+  tenantId       String           @map("tenant_id") @db.Uuid
+  tenant         Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  type           NotificationType
+  subscriptionId String           @map("subscription_id") @db.Uuid
+  subscription   Subscription     @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  memberId       String           @map("member_id") @db.Uuid
+  member         Member           @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  memberName     String           @map("member_name")
+  planName       String           @map("plan_name")
+  readAt         DateTime?        @map("read_at")
+  createdAt      DateTime         @default(now()) @map("created_at")
+
+  @@unique([tenantId, type, subscriptionId])
+  @@index([tenantId])
+  @@index([memberId])
+  @@index([subscriptionId])
+  @@map("notifications")
+}
+
+/// One door visit. tenant_id is for RLS.
+model CheckIn {
+  id             String       @id @default(uuid()) @db.Uuid
+  tenantId       String       @map("tenant_id") @db.Uuid
+  tenant         Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  memberId       String       @map("member_id") @db.Uuid
+  member         Member       @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  subscriptionId String       @map("subscription_id") @db.Uuid
+  subscription   Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  branchId       String       @map("branch_id") @db.Uuid
+  branch         Branch       @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  staffId        String       @map("staff_id") @db.Uuid
+  staff          Staff        @relation(fields: [staffId], references: [id], onDelete: Restrict)
+  checkedInAt    DateTime     @default(now()) @map("checked_in_at")
+
+  @@index([tenantId])
+  @@index([memberId])
+  @@index([subscriptionId, checkedInAt])
+  @@index([branchId])
+  @@map("check_ins")
 }

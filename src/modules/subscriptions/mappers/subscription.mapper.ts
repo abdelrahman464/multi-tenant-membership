@@ -1,5 +1,9 @@
 import { Prisma } from '@prisma/client';
-import { addUtcDays } from '../utils/freeze.util';
+import {
+  accessUntilOf,
+  graceDaysFromSettings,
+  isCalendarGrace,
+} from '../utils/access.util';
 
 type SubscriptionRow = Prisma.SubscriptionGetPayload<{
   include: {
@@ -29,6 +33,9 @@ export type PublicSubscription = {
   endsAt: Date;
   frozenAt: Date | null;
   freezeEndsAt: Date | null;
+  expiredAt: Date | null;
+  graceUsedAt: Date | null;
+  graceEndsAt: Date | null;
   accessUntil: Date;
   inGrace: boolean;
   status: SubscriptionRow['status'];
@@ -40,12 +47,13 @@ export function toPublicSubscription(
   row: SubscriptionRow,
   now = new Date(),
 ): PublicSubscription {
-  const settings = row.tenant.settings;
-  const graceDays =
-    settings?.graceEnabled && settings.graceDays > 0 ? settings.graceDays : 0;
-  const accessUntil = addUtcDays(row.endsAt, graceDays);
+  const graceDays = graceDaysFromSettings(row.tenant.settings);
+  const accessUntil = accessUntilOf(row.endsAt, graceDays);
   const inGrace =
-    row.status === 'ACTIVE' && now > row.endsAt && now <= accessUntil;
+    row.status === 'IN_GRACE' ||
+    (row.status === 'EXPIRED' &&
+      !row.graceUsedAt &&
+      isCalendarGrace(row.endsAt, now, graceDays));
 
   return {
     id: row.id,
@@ -64,6 +72,9 @@ export function toPublicSubscription(
     endsAt: row.endsAt,
     frozenAt: row.frozenAt,
     freezeEndsAt: row.freezeEndsAt,
+    expiredAt: row.expiredAt,
+    graceUsedAt: row.graceUsedAt,
+    graceEndsAt: row.graceEndsAt,
     accessUntil,
     inGrace,
     status: row.status,

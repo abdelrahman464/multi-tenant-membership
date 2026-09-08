@@ -11,8 +11,10 @@ import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { PrismaModule } from './database/prisma.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { CheckInsModule } from './modules/check-ins/check-ins.module';
 import { HealthModule } from './modules/health/health.module';
 import { MembersModule } from './modules/members/members.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
 import { PlansModule } from './modules/plans/plans.module';
 import { StaffModule } from './modules/staff/staff.module';
 import { SubscriptionsModule } from './modules/subscriptions/subscriptions.module';
@@ -38,6 +40,8 @@ import { RedisModule } from './redis/redis.module';
     MembersModule,
     PlansModule,
     SubscriptionsModule,
+    NotificationsModule,
+    CheckInsModule,
     AuthModule,
   ],
   providers: [

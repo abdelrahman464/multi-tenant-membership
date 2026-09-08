@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { ErrorCode } from '../../../common/constants/error-codes';
@@ -12,6 +13,7 @@ import {
 import { CreateSubscriptionDto } from '../dto/create-subscription.dto';
 import { ListSubscriptionsQueryDto } from '../dto/list-subscriptions-query.dto';
 import { toPublicSubscription } from '../mappers/subscription.mapper';
+import { expiryCutoff, graceDaysFromSettings } from '../utils/access.util';
 import { addUtcDays, freezeDaysUsedThisYear } from '../utils/freeze.util';
 
 @Injectable()
@@ -33,7 +35,7 @@ export class SubscriptionsRepository {
     };
 
     return this.prisma.withTenant(tenantId, async (tx) => {
-      await this.settleExpiredFreezes(tx, tenantId);
+      await this.settleSubscriptionState(tx, tenantId);
       const [rows, total] = await Promise.all([
         tx.subscription.findMany({
           where: scopedWhere,
@@ -53,7 +55,7 @@ export class SubscriptionsRepository {
 
   findById(tenantId: string, id: string) {
     return this.prisma.withTenant(tenantId, async (tx) => {
-      await this.settleExpiredFreezes(tx, tenantId, id);
+      await this.settleSubscriptionState(tx, tenantId, id);
       const row = await tx.subscription.findFirst({
         where: { id, tenantId },
         include: SUBSCRIPTION_INCLUDE,
@@ -108,7 +110,7 @@ export class SubscriptionsRepository {
   freeze(tenantId: string, id: string, days: number) {
     return this.prisma.withTenant(tenantId, async (tx) => {
       const now = new Date();
-      await this.settleExpiredFreezes(tx, tenantId, id);
+      await this.settleSubscriptionState(tx, tenantId, id);
 
       const subscription = await tx.subscription.findFirst({
         where: { id, tenantId },
@@ -117,11 +119,15 @@ export class SubscriptionsRepository {
       if (!subscription) {
         return null;
       }
-      if (subscription.status === 'CANCELLED') {
+      if (
+        subscription.status === 'CANCELLED' ||
+        subscription.status === 'EXPIRED' ||
+        subscription.status === 'IN_GRACE'
+      ) {
         throw new AppHttpException(
           HttpStatus.BAD_REQUEST,
           ErrorCode.SUBSCRIPTION_NOT_ACTIVE,
-          'Cancelled subscriptions cannot be frozen',
+          'Only an active subscription can be frozen',
         );
       }
       if (subscription.status === 'FROZEN') {
@@ -196,7 +202,7 @@ export class SubscriptionsRepository {
   unfreeze(tenantId: string, id: string) {
     return this.prisma.withTenant(tenantId, async (tx) => {
       const now = new Date();
-      await this.settleExpiredFreezes(tx, tenantId, id);
+      await this.settleSubscriptionState(tx, tenantId, id);
 
       const subscription = await tx.subscription.findFirst({
         where: { id, tenantId },
@@ -248,7 +254,7 @@ export class SubscriptionsRepository {
   renew(tenantId: string, id: string) {
     return this.prisma.withTenant(tenantId, async (tx) => {
       const now = new Date();
-      await this.settleExpiredFreezes(tx, tenantId, id);
+      await this.settleSubscriptionState(tx, tenantId, id);
 
       const subscription = await tx.subscription.findFirst({
         where: { id, tenantId },
@@ -347,7 +353,128 @@ export class SubscriptionsRepository {
     return toPublicSubscription(row, now);
   }
 
-  // TODO: add background job to settle expired freezes
+  /** Staff inbox list/unread settle this gym before they read notifications. */
+  settleForTenant(tenantId: string) {
+    return this.prisma.withTenant(tenantId, (tx) =>
+      this.settleSubscriptionState(tx, tenantId),
+    );
+  }
+
+  settleInTx(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    subscriptionId?: string,
+  ) {
+    return this.settleSubscriptionState(tx, tenantId, subscriptionId);
+  }
+
+  recordLifecycleNotifications(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    type: 'SUBSCRIPTION_IN_GRACE' | 'SUBSCRIPTION_EXPIRED',
+    rows: {
+      id: string;
+      memberId: string;
+      planName: string;
+      member: { name: string };
+    }[],
+  ) {
+    return this.recordNotifications(tx, tenantId, type, rows);
+  }
+
+  /** Platform sweep: settle freezes, expire past endsAt / accessUntil, record inbox rows. */
+  expireAllTenants() {
+    return this.prisma.withPlatform(async (tx) => {
+      const tenants = await tx.tenant.findMany({ select: { id: true } });
+      for (const tenant of tenants) {
+        await this.settleSubscriptionState(tx, tenant.id);
+      }
+    });
+  }
+
+  private async settleSubscriptionState(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    subscriptionId?: string,
+  ): Promise<void> {
+    await this.settleExpiredFreezes(tx, tenantId, subscriptionId);
+    const settings = await tx.tenantSettings.findUnique({
+      where: { tenantId },
+      select: { graceEnabled: true, graceDays: true },
+    });
+    const graceDays = graceDaysFromSettings(settings);
+    await this.expireActivePastAccess(tx, tenantId, graceDays, subscriptionId);
+  }
+
+  private async expireActivePastAccess(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    graceDays: number,
+    subscriptionId?: string,
+  ): Promise<void> {
+    const now = new Date();
+    const due = await tx.subscription.findMany({
+      where: {
+        tenantId,
+        ...(subscriptionId ? { id: subscriptionId } : {}),
+        OR: [
+          { status: 'ACTIVE', endsAt: { lte: now } },
+          {
+            status: 'IN_GRACE',
+            graceEndsAt: { lte: now },
+          },
+          {
+            status: 'IN_GRACE',
+            graceEndsAt: null,
+            endsAt: { lte: expiryCutoff(now, graceDays) },
+          },
+        ],
+      },
+      select: {
+        id: true,
+        memberId: true,
+        planName: true,
+        member: { select: { name: true } },
+      },
+    });
+    if (due.length === 0) {
+      return;
+    }
+    await tx.subscription.updateMany({
+      where: { tenantId, id: { in: due.map((row) => row.id) } },
+      data: { status: 'EXPIRED', expiredAt: now },
+    });
+    await this.recordNotifications(tx, tenantId, 'SUBSCRIPTION_EXPIRED', due);
+  }
+
+  private async recordNotifications(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    type: 'SUBSCRIPTION_IN_GRACE' | 'SUBSCRIPTION_EXPIRED',
+    rows: {
+      id: string;
+      memberId: string;
+      planName: string;
+      member: { name: string };
+    }[],
+  ): Promise<void> {
+    if (rows.length === 0) {
+      return;
+    }
+    await tx.notification.createMany({
+      data: rows.map((row) => ({
+        id: randomUUID(),
+        tenantId,
+        type,
+        subscriptionId: row.id,
+        memberId: row.memberId,
+        memberName: row.member.name,
+        planName: row.planName,
+      })),
+      skipDuplicates: true,
+    });
+  }
+
   private async settleExpiredFreezes(
     tx: Prisma.TransactionClient,
     tenantId: string,
