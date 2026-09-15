@@ -40,11 +40,14 @@ export type PublicSubscription = {
     status: SubscriptionRow['plan']['status'];
   };
   branches: { id: string; name: string }[];
+  paidTotal: number;
+  dueAmount: number;
 };
 
 export function toPublicSubscription(
   row: SubscriptionRow,
   now = new Date(),
+  extras: { paidTotal: number } = { paidTotal: 0 },
 ): PublicSubscription {
   const graceDays = graceDaysFromSettings(row.tenant.settings);
   const accessUntil = accessUntilOf(row.endsAt, graceDays);
@@ -53,6 +56,9 @@ export function toPublicSubscription(
     (row.status === 'EXPIRED' &&
       !row.graceUsedAt &&
       isCalendarGrace(row.endsAt, now, graceDays));
+  const price = Number(row.price);
+  const paidTotal = extras.paidTotal;
+  const dueAmount = Math.round(Math.max(0, price - paidTotal) * 100) / 100;
 
   return {
     id: row.id,
@@ -63,7 +69,7 @@ export function toPublicSubscription(
     sessionCount: row.sessionCount,
     sessionsRemaining: row.sessionsRemaining,
     maxVisitsPerDay: row.maxVisitsPerDay,
-    price: Number(row.price),
+    price,
     currency: row.tenant.currency,
     allBranches: row.allBranches,
     startsAt: row.startsAt,
@@ -84,6 +90,8 @@ export function toPublicSubscription(
       status: row.plan.status,
     },
     branches: allowedBranches(row),
+    paidTotal,
+    dueAmount,
   };
 }
 

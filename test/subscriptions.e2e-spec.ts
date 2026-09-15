@@ -170,6 +170,67 @@ describe('Subscriptions (e2e)', () => {
     expect(listed.body.data[0].branches[0]).toEqual(
       expect.objectContaining({ id: branchA, name: 'Maadi' }),
     );
+    expect(listed.body.data[0].dueAmount).toBeGreaterThan(0);
+
+    const unpaid = await request(app.getHttpServer())
+      .get('/api/v1/subscriptions?unpaid=true')
+      .set('Authorization', `Bearer ${tokenA}`)
+      .expect(200);
+    expect(unpaid.body.total).toBe(2);
+    expect(
+      unpaid.body.data.every((row: { dueAmount: number }) => row.dueAmount > 0),
+    ).toBe(true);
+
+    const inProgress = await request(app.getHttpServer())
+      .get('/api/v1/subscriptions?inProgress=true')
+      .set('Authorization', `Bearer ${tokenA}`)
+      .expect(200);
+    expect(inProgress.body.total).toBe(2);
+
+    const completedNone = await request(app.getHttpServer())
+      .get('/api/v1/subscriptions?completedUnrenewed=true')
+      .set('Authorization', `Bearer ${tokenA}`)
+      .expect(200);
+    expect(completedNone.body.total).toBe(0);
+
+    const expiredNone = await request(app.getHttpServer())
+      .get('/api/v1/subscriptions?expired=true')
+      .set('Authorization', `Bearer ${tokenA}`)
+      .expect(200);
+    expect(expiredNone.body.total).toBe(0);
+
+    await prisma.withTenant(gymA.body.id as string, (tx) =>
+      tx.subscription.update({
+        where: { id: timeSub.body.id },
+        data: {
+          status: 'EXPIRED',
+          expiredAt: new Date(),
+          endsAt: new Date('2020-01-01T00:00:00.000Z'),
+        },
+      }),
+    );
+
+    const completed = await request(app.getHttpServer())
+      .get('/api/v1/subscriptions?completedUnrenewed=true')
+      .set('Authorization', `Bearer ${tokenA}`)
+      .expect(200);
+    expect(completed.body.total).toBe(1);
+    expect(completed.body.data[0].id).toBe(timeSub.body.id);
+
+    const expired = await request(app.getHttpServer())
+      .get('/api/v1/subscriptions?expired=true')
+      .set('Authorization', `Bearer ${tokenA}`)
+      .expect(200);
+    expect(expired.body.total).toBe(1);
+    expect(expired.body.data[0].id).toBe(timeSub.body.id);
+    expect(expired.body.data[0].status).toBe('EXPIRED');
+
+    const stillGoing = await request(app.getHttpServer())
+      .get('/api/v1/subscriptions?inProgress=true')
+      .set('Authorization', `Bearer ${tokenA}`)
+      .expect(200);
+    expect(stillGoing.body.total).toBe(1);
+    expect(stillGoing.body.data[0].id).toBe(packSub.body.id);
 
     const second = await request(app.getHttpServer())
       .post(`/api/v1/platform/tenants/${gymA.body.id}/branches`)
@@ -247,5 +308,11 @@ describe('Subscriptions (e2e)', () => {
       .send({ memberId: member.body.id, planId: pack.body.id })
       .expect(400);
     expect(archivedMember.body.code).toBe(ErrorCode.MEMBER_ARCHIVED);
+
+    const unpaidAfterArchive = await request(app.getHttpServer())
+      .get('/api/v1/subscriptions?unpaid=true')
+      .set('Authorization', `Bearer ${tokenA}`)
+      .expect(200);
+    expect(unpaidAfterArchive.body.total).toBe(0);
   });
 });

@@ -1,0 +1,2 @@
+export const DASHBOARD_MAX_RANGE_DAYS = 366;
+export const DASHBOARD_ENDING_SOON_DAYS = 7;

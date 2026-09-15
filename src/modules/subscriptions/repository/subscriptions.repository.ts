@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, SubscriptionStatus } from '@prisma/client';
 import { ErrorCode } from '../../../common/constants/error-codes';
 import { AppHttpException } from '../../../common/errors/app-http.exception';
 import { ApiFeatures } from '../../../common/utils/api-features.utils';
@@ -12,7 +12,10 @@ import {
 } from '../constants/subscription.constants';
 import { CreateSubscriptionDto } from '../dto/create-subscription.dto';
 import { ListSubscriptionsQueryDto } from '../dto/list-subscriptions-query.dto';
-import { toPublicSubscription } from '../mappers/subscription.mapper';
+import {
+  toPublicSubscription,
+  type SubscriptionRow,
+} from '../mappers/subscription.mapper';
 import { expiryCutoff, graceDaysFromSettings } from '../utils/access.util';
 import { addUtcDays, freezeDaysUsedThisYear } from '../utils/freeze.util';
 
@@ -36,6 +39,28 @@ export class SubscriptionsRepository {
 
     return this.prisma.withTenant(tenantId, async (tx) => {
       await this.settleSubscriptionState(tx, tenantId);
+      const idFilters: string[][] = [];
+      if (query.unpaid === true) {
+        idFilters.push(await this.unpaidSubscriptionIds(tx, tenantId));
+      }
+      if (query.inProgress === true) {
+        idFilters.push(await this.inProgressSubscriptionIds(tx, tenantId));
+      }
+      if (query.completedUnrenewed === true) {
+        idFilters.push(
+          await this.completedUnrenewedSubscriptionIds(tx, tenantId),
+        );
+      }
+      if (query.expired === true) {
+        idFilters.push(await this.expiredSubscriptionIds(tx, tenantId));
+      }
+      if (idFilters.length > 0) {
+        const ids = intersectIds(idFilters);
+        if (ids.length === 0) {
+          return features.paginateResult([], 0);
+        }
+        scopedWhere.AND = [...asAnd(scopedWhere.AND), { id: { in: ids } }];
+      }
       const [rows, total] = await Promise.all([
         tx.subscription.findMany({
           where: scopedWhere,
@@ -46,10 +71,8 @@ export class SubscriptionsRepository {
         }),
         tx.subscription.count({ where: scopedWhere }),
       ]);
-      return features.paginateResult(
-        rows.map((row) => toPublicSubscription(row)),
-        total,
-      );
+      const mapped = await this.toPublicRows(tx, tenantId, rows);
+      return features.paginateResult(mapped, total);
     });
   }
 
@@ -60,7 +83,7 @@ export class SubscriptionsRepository {
         where: { id, tenantId },
         include: SUBSCRIPTION_INCLUDE,
       });
-      return row ? toPublicSubscription(row) : null;
+      return row ? this.toPublicRow(tx, tenantId, row) : null;
     });
   }
 
@@ -195,7 +218,7 @@ export class SubscriptionsRepository {
         },
         include: SUBSCRIPTION_INCLUDE,
       });
-      return toPublicSubscription(row, now);
+      return this.toPublicRow(tx, tenantId, row, now);
     });
   }
 
@@ -247,7 +270,7 @@ export class SubscriptionsRepository {
         },
         include: SUBSCRIPTION_INCLUDE,
       });
-      return toPublicSubscription(row, now);
+      return this.toPublicRow(tx, tenantId, row, now);
     });
   }
 
@@ -350,7 +373,7 @@ export class SubscriptionsRepository {
       },
       include: SUBSCRIPTION_INCLUDE,
     });
-    return toPublicSubscription(row, now);
+    return this.toPublicRow(tx, tenantId, row, now);
   }
 
   /** Staff inbox list/unread settle this gym before they read notifications. */
@@ -505,4 +528,181 @@ export class SubscriptionsRepository {
       });
     }
   }
+
+  private async unpaidSubscriptionIds(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+  ): Promise<string[]> {
+    const billed = await tx.subscription.findMany({
+      where: {
+        tenantId,
+        status: { not: SubscriptionStatus.CANCELLED },
+        price: { gt: 0 },
+        member: { status: 'ACTIVE' },
+      },
+      select: { id: true, price: true },
+    });
+    if (billed.length === 0) {
+      return [];
+    }
+    const paid = await this.paidTotals(
+      tx,
+      tenantId,
+      billed.map((row) => row.id),
+    );
+    return billed
+      .filter((row) => Number(row.price) - (paid.get(row.id) ?? 0) > 0)
+      .map((row) => row.id);
+  }
+
+  private async inProgressSubscriptionIds(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+  ): Promise<string[]> {
+    const rows = await this.lifecycleRows(tx, tenantId);
+    return rows
+      .filter((row) => row.member.status === 'ACTIVE' && isInProgress(row))
+      .map((row) => row.id);
+  }
+
+  private async expiredSubscriptionIds(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+  ): Promise<string[]> {
+    const rows = await tx.subscription.findMany({
+      where: {
+        tenantId,
+        status: SubscriptionStatus.EXPIRED,
+        member: { status: 'ACTIVE' },
+      },
+      select: { id: true },
+    });
+    return rows.map((row) => row.id);
+  }
+
+  async completedUnrenewedSubscriptionIds(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+  ): Promise<string[]> {
+    const rows = await this.lifecycleRows(tx, tenantId);
+    const latest = new Map<string, { id: string; createdAt: Date }>();
+    for (const row of rows) {
+      const key = `${row.memberId}:${row.planId}`;
+      const current = latest.get(key);
+      if (!current || row.createdAt > current.createdAt) {
+        latest.set(key, { id: row.id, createdAt: row.createdAt });
+      }
+    }
+    const latestIds = new Set([...latest.values()].map((row) => row.id));
+    return rows
+      .filter((row) => latestIds.has(row.id) && isFinished(row))
+      .map((row) => row.id);
+  }
+
+  private lifecycleRows(tx: Prisma.TransactionClient, tenantId: string) {
+    return tx.subscription.findMany({
+      where: { tenantId, status: { not: SubscriptionStatus.CANCELLED } },
+      select: {
+        id: true,
+        memberId: true,
+        planId: true,
+        createdAt: true,
+        status: true,
+        sessionCount: true,
+        sessionsRemaining: true,
+        member: { select: { status: true } },
+      },
+    });
+  }
+
+  private async paidTotals(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    subscriptionIds: string[],
+  ): Promise<Map<string, number>> {
+    const totals = new Map<string, number>();
+    if (subscriptionIds.length === 0) {
+      return totals;
+    }
+    const grouped = await tx.payment.groupBy({
+      by: ['subscriptionId'],
+      where: { tenantId, subscriptionId: { in: subscriptionIds } },
+      _sum: { amount: true },
+    });
+    for (const row of grouped) {
+      totals.set(row.subscriptionId, Number(row._sum.amount ?? 0));
+    }
+    return totals;
+  }
+
+  private async toPublicRows(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    rows: SubscriptionRow[],
+    now?: Date,
+  ) {
+    const paid = await this.paidTotals(
+      tx,
+      tenantId,
+      rows.map((row) => row.id),
+    );
+    return rows.map((row) =>
+      toPublicSubscription(row, now, { paidTotal: paid.get(row.id) ?? 0 }),
+    );
+  }
+
+  private async toPublicRow(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    row: SubscriptionRow,
+    now?: Date,
+  ) {
+    const paid =
+      (await this.paidTotals(tx, tenantId, [row.id])).get(row.id) ?? 0;
+    return toPublicSubscription(row, now, { paidTotal: paid });
+  }
+}
+
+function asAnd(
+  value: Prisma.SubscriptionWhereInput['AND'],
+): Prisma.SubscriptionWhereInput[] {
+  if (!value) return [];
+  return Array.isArray(value) ? value : [value];
+}
+
+function intersectIds(groups: string[][]): string[] {
+  if (groups.length === 0) return [];
+  return groups.reduce((acc, next) => {
+    const set = new Set(next);
+    return acc.filter((id) => set.has(id));
+  });
+}
+
+type LifecycleRow = {
+  id: string;
+  memberId: string;
+  planId: string;
+  createdAt: Date;
+  status: SubscriptionStatus;
+  sessionCount: number | null;
+  sessionsRemaining: number | null;
+};
+
+function isFinished(row: LifecycleRow): boolean {
+  if (row.status === SubscriptionStatus.EXPIRED) return true;
+  return row.sessionCount != null && (row.sessionsRemaining ?? 0) <= 0;
+}
+
+function isInProgress(row: LifecycleRow): boolean {
+  if (
+    row.status !== SubscriptionStatus.ACTIVE &&
+    row.status !== SubscriptionStatus.FROZEN &&
+    row.status !== SubscriptionStatus.IN_GRACE
+  ) {
+    return false;
+  }
+  if (row.sessionCount != null && (row.sessionsRemaining ?? 0) <= 0) {
+    return false;
+  }
+  return true;
 }

@@ -12,6 +12,7 @@ import { RolesGuard } from './common/guards/roles.guard';
 import { PrismaModule } from './database/prisma.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { CheckInsModule } from './modules/check-ins/check-ins.module';
+import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { HealthModule } from './modules/health/health.module';
 import { MembersModule } from './modules/members/members.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
@@ -44,6 +45,7 @@ import { RedisModule } from './redis/redis.module';
     NotificationsModule,
     CheckInsModule,
     PaymentsModule,
+    DashboardModule,
     AuthModule,
   ],
   providers: [

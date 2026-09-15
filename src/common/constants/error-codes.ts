@@ -54,6 +54,7 @@ export const ErrorCode = {
   PAYMENT_ALREADY_SETTLED: 'PAYMENT_ALREADY_SETTLED',
   PAYMENT_EXCEEDS_DUE: 'PAYMENT_EXCEEDS_DUE',
   PAYMENT_NOT_DUE: 'PAYMENT_NOT_DUE',
+  DATE_RANGE_INVALID: 'DATE_RANGE_INVALID',
 } as const;
 
 export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode];
