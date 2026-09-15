@@ -2,7 +2,7 @@
   "name": "membership-api",
   "version": "0.1.0",
   "private": true,
-  "description": "Staff-facing multi-tenant membership API. Phase 9: check-in at the door.",
+  "description": "Staff-facing multi-tenant membership API. Phase 10: desk pay (cash/card, no Stripe).",
   "engines": {
     "node": ">=22.12.0"
   },

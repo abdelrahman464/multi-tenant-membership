@@ -86,6 +86,7 @@ describe('Staff auth (e2e)', () => {
     expect(login.body.accessToken).toEqual(expect.any(String));
     expect(login.body.staff.role).toBe('TENANT_OWNER');
     expect(login.body.staff.tenantId).toBe(created.body.id);
+    expect(login.body.staff.branch).toBeNull();
     expect(login.body.staff.password).toBeUndefined();
 
     const accessToken = login.body.accessToken as string;
@@ -104,6 +105,23 @@ describe('Staff auth (e2e)', () => {
 
     expect(me.body.email).toBe(ownerEmail);
     expect(me.body.tenantId).toBe(created.body.id);
+    expect(me.body.tenant).toEqual(
+      expect.objectContaining({
+        id: created.body.id,
+        slug,
+        name: 'Auth Gym',
+        status: 'ACTIVE',
+        timezone: expect.any(String),
+        currency: expect.any(String),
+        settings: expect.objectContaining({
+          requirePaymentForAccess: expect.any(Boolean),
+          minPaidPercentForAccess: expect.any(Number),
+        }),
+        branches: expect.arrayContaining([
+          expect.objectContaining({ id: branchId, name: 'Maadi' }),
+        ]),
+      }),
+    );
 
     const branches = await request(app.getHttpServer())
       .get('/api/v1/branches?page=1&limit=10')
@@ -137,6 +155,7 @@ describe('Staff auth (e2e)', () => {
 
     expect(desk.body.role).toBe('BRANCH_STAFF');
     expect(desk.body.branchId).toBe(branchId);
+    expect(desk.body.branch).toEqual({ id: branchId, name: 'Maadi' });
     expect(desk.body.password).toBeUndefined();
 
     const deskLogin = await request(app.getHttpServer())

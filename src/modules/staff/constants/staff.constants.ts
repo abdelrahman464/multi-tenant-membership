@@ -7,6 +7,7 @@ export const STAFF_PUBLIC_SELECT = {
   branchId: true,
   createdAt: true,
   updatedAt: true,
+  branch: { select: { id: true, name: true } },
 } as const;
 
 export const STAFF_SEARCH_FIELDS = ['name', 'email'] as const;

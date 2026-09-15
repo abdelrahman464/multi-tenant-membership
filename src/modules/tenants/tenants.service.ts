@@ -157,6 +157,17 @@ export class TenantsService {
         'Max freeze days per year must be at least 1 when freeze is enabled',
       );
     }
+    const requirePaymentForAccess =
+      dto.requirePaymentForAccess ?? current.requirePaymentForAccess;
+    const minPaidPercentForAccess =
+      dto.minPaidPercentForAccess ?? current.minPaidPercentForAccess;
+    if (requirePaymentForAccess && minPaidPercentForAccess < 1) {
+      throw new AppHttpException(
+        HttpStatus.BAD_REQUEST,
+        ErrorCode.MIN_PAID_PERCENT_REQUIRED,
+        'Minimum paid percent must be at least 1 when payment is required for access',
+      );
+    }
     return this.tenantsRepository.updateSettings(tenantId, dto);
   }
 

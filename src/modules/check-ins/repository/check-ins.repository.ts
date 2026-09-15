@@ -13,6 +13,7 @@ import {
 } from '../../subscriptions/utils/access.util';
 import {
   CHECKIN_FILTER_FIELDS,
+  CHECKIN_INCLUDE,
   CHECKIN_LOOKBACK_MS,
   CHECKIN_SORT_FIELDS,
 } from '../constants/check-in.constants';
@@ -27,6 +28,12 @@ type DoorSubscription = Prisma.SubscriptionGetPayload<{
     plan: { select: { branches: { select: { branchId: true } } } };
   };
 }>;
+
+type DoorPaymentGate = {
+  required: boolean;
+  minPercent: number;
+  paidBySubscription: Map<string, number>;
+};
 
 @Injectable()
 export class CheckInsRepository {
@@ -56,11 +63,7 @@ export class CheckInsRepository {
           orderBy: orderBy as Prisma.CheckInOrderByWithRelationInput[],
           skip,
           take,
-          include: {
-            subscription: {
-              select: { status: true, sessionsRemaining: true },
-            },
-          },
+          include: CHECKIN_INCLUDE,
         }),
         tx.checkIn.count({ where: scopedWhere }),
       ]);
@@ -129,7 +132,14 @@ export class CheckInsRepository {
         where: { id: actor.tenantId },
         select: {
           timezone: true,
-          settings: { select: { graceEnabled: true, graceDays: true } },
+          settings: {
+            select: {
+              graceEnabled: true,
+              graceDays: true,
+              requirePaymentForAccess: true,
+              minPaidPercentForAccess: true,
+            },
+          },
         },
       });
       const graceDays = graceDaysFromSettings(tenant?.settings);
@@ -155,9 +165,31 @@ export class CheckInsRepository {
         );
       }
 
+      const paymentGate: DoorPaymentGate = {
+        required: tenant?.settings?.requirePaymentForAccess === true,
+        minPercent: tenant?.settings?.minPaidPercentForAccess ?? 50,
+        paidBySubscription: await this.paidTotals(
+          tx,
+          actor.tenantId,
+          candidates.map((row) => row.id),
+        ),
+      };
+
       const subscription = data.subscriptionId
-        ? this.assertDoorAccess(candidates[0], data.branchId, now, graceDays)
-        : this.pickDoorSubscription(candidates, data.branchId, now, graceDays);
+        ? this.assertDoorAccess(
+            candidates[0],
+            data.branchId,
+            now,
+            graceDays,
+            paymentGate,
+          )
+        : this.pickDoorSubscription(
+            candidates,
+            data.branchId,
+            now,
+            graceDays,
+            paymentGate,
+          );
 
       const visitsToday = await this.countVisitsToday(
         tx,
@@ -221,6 +253,7 @@ export class CheckInsRepository {
           staffId: actor.id,
           checkedInAt: now,
         },
+        include: CHECKIN_INCLUDE,
       });
 
       return toPublicCheckIn(row, {
@@ -237,11 +270,27 @@ export class CheckInsRepository {
     branchId: string,
     now: Date,
     graceDays: number,
+    paymentGate: DoorPaymentGate,
   ): DoorSubscription {
     const eligible = rows.filter(
-      (row) => this.doorDenial(row, branchId, now, graceDays) === null,
+      (row) =>
+        this.doorDenial(row, branchId, now, graceDays, paymentGate) === null,
     );
     if (eligible.length === 0) {
+      const otherwiseOk = rows.some(
+        (row) =>
+          this.doorDenial(row, branchId, now, graceDays, {
+            ...paymentGate,
+            required: false,
+          }) === null,
+      );
+      if (otherwiseOk && paymentGate.required) {
+        throw new AppHttpException(
+          HttpStatus.BAD_REQUEST,
+          ErrorCode.CHECKIN_PAYMENT_REQUIRED,
+          `Payment of at least ${paymentGate.minPercent}% of the plan price is required to check in`,
+        );
+      }
       throw new AppHttpException(
         HttpStatus.BAD_REQUEST,
         ErrorCode.CHECKIN_NO_SUBSCRIPTION,
@@ -266,8 +315,9 @@ export class CheckInsRepository {
     branchId: string,
     now: Date,
     graceDays: number,
+    paymentGate: DoorPaymentGate,
   ): DoorSubscription {
-    const code = this.doorDenial(row, branchId, now, graceDays);
+    const code = this.doorDenial(row, branchId, now, graceDays, paymentGate);
     if (!code) {
       return row;
     }
@@ -275,12 +325,13 @@ export class CheckInsRepository {
       [ErrorCode.SUBSCRIPTION_FROZEN]: 'Frozen subscriptions cannot check in',
       [ErrorCode.SUBSCRIPTION_NOT_ACTIVE]:
         'Cancelled subscriptions cannot check in',
-      [ErrorCode.CHECKIN_EXPIRED]: 's',
+      [ErrorCode.CHECKIN_EXPIRED]: 'Grace days have ended',
       [ErrorCode.CHECKIN_GRACE_USED]:
         'This subscription already used its grace period',
       [ErrorCode.CHECKIN_NO_SESSIONS]: 'No sessions remaining',
       [ErrorCode.CHECKIN_BRANCH_NOT_ALLOWED]:
         'This plan is not allowed at this branch',
+      [ErrorCode.CHECKIN_PAYMENT_REQUIRED]: `Payment of at least ${paymentGate.minPercent}% of the plan price is required to check in`,
     };
     throw new AppHttpException(
       HttpStatus.BAD_REQUEST,
@@ -294,6 +345,7 @@ export class CheckInsRepository {
     branchId: string,
     now: Date,
     graceDays: number,
+    paymentGate: DoorPaymentGate,
   ): ErrorCode | null {
     if (row.status === 'FROZEN') {
       return ErrorCode.SUBSCRIPTION_FROZEN;
@@ -313,16 +365,61 @@ export class CheckInsRepository {
       return ErrorCode.CHECKIN_NO_SESSIONS;
     }
     if (row.status === 'ACTIVE') {
-      return now <= row.endsAt ? null : ErrorCode.CHECKIN_EXPIRED;
-    }
-    if (row.graceUsedAt && row.status !== 'IN_GRACE') {
+      if (now > row.endsAt) {
+        return ErrorCode.CHECKIN_EXPIRED;
+      }
+    } else if (row.graceUsedAt && row.status !== 'IN_GRACE') {
       return ErrorCode.CHECKIN_GRACE_USED;
-    }
-    if (row.status === 'EXPIRED' || row.status === 'IN_GRACE') {
+    } else if (row.status === 'EXPIRED' || row.status === 'IN_GRACE') {
       const until = row.graceEndsAt ?? accessUntilOf(row.endsAt, graceDays);
-      return now <= until ? null : ErrorCode.CHECKIN_EXPIRED;
+      if (now > until) {
+        return ErrorCode.CHECKIN_EXPIRED;
+      }
+    } else {
+      return ErrorCode.CHECKIN_NO_SUBSCRIPTION;
     }
-    return ErrorCode.CHECKIN_NO_SUBSCRIPTION;
+    if (paymentGate.required && !this.meetsPaidPercent(row, paymentGate)) {
+      return ErrorCode.CHECKIN_PAYMENT_REQUIRED;
+    }
+    return null;
+  }
+
+  private meetsPaidPercent(
+    row: DoorSubscription,
+    paymentGate: DoorPaymentGate,
+  ): boolean {
+    const price = Number(row.price);
+    if (price <= 0) {
+      return true;
+    }
+    const paid = paymentGate.paidBySubscription.get(row.id) ?? 0;
+    const needed = this.roundMoney((price * paymentGate.minPercent) / 100);
+    return this.roundMoney(paid) >= needed;
+  }
+
+  private async paidTotals(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    subscriptionIds: string[],
+  ): Promise<Map<string, number>> {
+    const unique = [...new Set(subscriptionIds)];
+    const totals = new Map<string, number>();
+    if (unique.length === 0) {
+      return totals;
+    }
+    const grouped = await tx.payment.groupBy({
+      by: ['subscriptionId'],
+      where: { tenantId, subscriptionId: { in: unique } },
+      _sum: { amount: true },
+    });
+    for (const row of grouped) {
+      totals.set(row.subscriptionId, Number(row._sum.amount ?? 0));
+    }
+    return totals;
+  }
+
+  private roundMoney(value: number): number {
+    return Math.round(value * 100) / 100;
   }
 
   private async countVisitsToday(

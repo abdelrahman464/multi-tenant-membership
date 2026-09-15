@@ -1,3 +1,5 @@
+import { Prisma } from '@prisma/client';
+
 export const SUBSCRIPTION_FILTER_FIELDS = [
   'memberId',
   'planId',
@@ -17,6 +19,20 @@ export const SUBSCRIPTION_INCLUDE = {
       settings: {
         select: { graceEnabled: true, graceDays: true },
       },
+      branches: { select: { id: true, name: true } },
     },
   },
-} as const;
+  member: {
+    select: { id: true, name: true, phone: true, status: true },
+  },
+  plan: {
+    select: {
+      id: true,
+      name: true,
+      status: true,
+      branches: {
+        select: { branch: { select: { id: true, name: true } } },
+      },
+    },
+  },
+} satisfies Prisma.SubscriptionInclude;

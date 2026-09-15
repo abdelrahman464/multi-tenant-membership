@@ -15,6 +15,7 @@ import { CheckInsModule } from './modules/check-ins/check-ins.module';
 import { HealthModule } from './modules/health/health.module';
 import { MembersModule } from './modules/members/members.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
+import { PaymentsModule } from './modules/payments/payments.module';
 import { PlansModule } from './modules/plans/plans.module';
 import { StaffModule } from './modules/staff/staff.module';
 import { SubscriptionsModule } from './modules/subscriptions/subscriptions.module';
@@ -42,6 +43,7 @@ import { RedisModule } from './redis/redis.module';
     SubscriptionsModule,
     NotificationsModule,
     CheckInsModule,
+    PaymentsModule,
     AuthModule,
   ],
   providers: [

@@ -71,6 +71,8 @@ describe('Subscription lifecycle (e2e)', () => {
       .expect(200);
     expect(defaults.body.freezeEnabled).toBe(false);
     expect(defaults.body.graceEnabled).toBe(false);
+    expect(defaults.body.requirePaymentForAccess).toBe(false);
+    expect(defaults.body.minPaidPercentForAccess).toBe(50);
 
     const member = await request(app.getHttpServer())
       .post('/api/v1/members')

@@ -2,7 +2,7 @@
 
 Staff-only B2B API for gyms and academies. One Postgres database, many tenants (businesses), branches as locations. Isolation is `tenant_id` plus **row-level security (RLS)**.
 
-**Phase 9 (current):** the door. `ACTIVE` becomes `EXPIRED` at `endsAt`. A check-in during the extra days sets `IN_GRACE` and writes the grace inbox row. After `accessUntil` the visit is blocked.
+**Phase 10 (current):** desk pay. Staff record cash or card against a sold plan. Not Stripe. Unpaid does not block the door.
 
 | | |
 |---|---|
@@ -58,7 +58,7 @@ curl.exe -X POST http://localhost:8000/api/v1/auth/login `
   -d "{\"slug\":\"delta-swim\",\"email\":\"owner@delta.test\",\"password\":\"Password1!\"}"
 ```
 
-Use the returned `accessToken` as `Authorization: Bearer …`. Refresh uses the `refreshToken` httpOnly cookie, or `{ "refreshToken": "…" }` in the body.
+Use the returned `accessToken` as `Authorization: Bearer …`. Refresh uses the `refreshToken` httpOnly cookie, or `{ "refreshToken": "…" }` in the body. `GET /auth/me` returns the staff row plus the gym `tenant` (name, slug, country, timezone, currency, status, settings, branches).
 
 ```bash
 npm run lint
@@ -127,14 +127,52 @@ Roles: `TENANT_OWNER`, `ADMIN`, `BRANCH_STAFF`. Role is loaded from the database
 | POST | `/api/v1/notifications/readAll` | Any staff |
 | GET | `/api/v1/checkIns` | Any staff (`memberId`, `branchId`, `subscriptionId`, `sort`, `page`, `limit`) |
 | POST | `/api/v1/checkIns` | Any staff (`memberId` + `branchId`, optional `subscriptionId`) |
+| GET | `/api/v1/payments` | Any staff (`memberId`, `subscriptionId`, `planId`, `branchId`, `method`, `sort`, `page`, `limit`) |
+| POST | `/api/v1/payments` | Any staff (`subscriptionId` + `branchId` + `method`, optional `amount` / `notes`) |
+| GET | `/api/v1/payments/:id` | Any staff |
 
 `BRANCH_STAFF` must be assigned a `branchId` in this tenant. Admins are not assigned to one branch. Nobody can create a second `TENANT_OWNER` through the API.
 
-Member `phone` must be E.164 (`+201001234567`). The same number may exist in two gyms. `homeBranchId` must be a branch of the staff’s tenant. `tenant_id` is never accepted from the body.
+Member `phone` must be E.164 (`+201001234567`). The same number may exist in two gyms. `homeBranchId` must be a branch of the staff’s tenant. Member list/get/create/update include nested `homeBranch` (`id`, `name`). Staff list/create, login, and `/auth/me` include nested `branch` (`id`, `name`) or `null` for owner/admin. `GET /auth/me` also returns the gym `tenant` (settings and branches). `tenant_id` is never accepted from the body.
 
 A plan always has `durationDays`. `sessionCount` is optional (8 sessions in 30 days). `maxVisitsPerDay` is 1 or 2 in typical gyms (default 1): how many times the member may check in on one calendar day. `allBranches: true` (default) means every location; `false` requires `branchIds` in this tenant. `GET /plans?branchId=` returns all-location plans plus selected plans that include that branch. Member home branch is not the plan’s allowed branches. Price is major units of the tenant currency (EGP), not a Stripe amount. Desk staff can list plans and subscribe members but cannot create or edit plans.
 
-Subscribing snapshots the sold terms (`durationDays`, `sessionCount`, `sessionsRemaining`, `maxVisitsPerDay`, `price`, `planName`). A member may hold more than one subscription. Archived members and archived plans cannot be sold. `POST /checkIns` decrements a pack and counts visits on the tenant calendar day (Cairo). Branch staff may only check in at their assigned branch.
+Subscribing snapshots the sold terms (`durationDays`, `sessionCount`, `sessionsRemaining`, `maxVisitsPerDay`, `price`, `planName`). A member may hold more than one subscription. Archived members and archived plans cannot be sold. List, get, create, freeze, unfreeze, and renew return nested `member` (name, phone, status), current `plan` (name, status), and `branches` (every gym location when `allBranches` is true, otherwise the plan’s selected set). Who sold the row is not stored.
+
+`POST /checkIns` decrements a pack and counts visits on the tenant calendar day (Cairo). Create and list return `memberId`, `subscriptionId`, nested `member` (name, phone, status), `branch` (name), `staff` (name, role — no password), and `subscription` with sold terms and current `plan` name. Branch staff may only check in at their assigned branch. Unpaid check-in is allowed unless `requirePaymentForAccess` is on. Then the member must have paid at least `minPaidPercentForAccess` of the sold price (default 50). A free plan (`price` 0) always passes the door.
+
+### How the door picks a plan (when staff do not choose one)
+
+At check-in the desk sends **who** (`memberId`) and **where** (`branchId`). They may also send **which sold plan** (`subscriptionId`). If they omit that, the system picks one for this member at this location. Home branch is not used.
+
+**A sold plan can be used only if all of these are true:**
+
+- It belongs to this member at this gym.
+- It is allowed at this location (every branch, or this branch is on the plan).
+- It is not frozen and not cancelled.
+- If it is a session pack, it still has sessions left.
+- If it is still in its paid dates (`ACTIVE`), those dates have not ended.
+- If the paid dates have ended, it is still inside the gym’s extra grace days, and this sold plan has not already used up that grace.
+- If the gym turned on “must pay before entry”, this sold plan has collected at least the gym’s percent of the price (default half). A free plan (price 0) is never blocked for money.
+
+If nothing matches, check-in is refused. If the only problem is money, the error is `CHECKIN_PAYMENT_REQUIRED`.
+
+**If more than one sold plan still matches, the door uses this order:**
+
+1. A plan that is still in its paid dates (`ACTIVE`).
+2. Otherwise a plan already in grace (`IN_GRACE`).
+3. Otherwise a plan that has ended but has unused grace left (this visit will start grace).
+4. If two are in the same group, the one that **ends sooner** (so the visit is used on the plan that is about to run out).
+
+Example: Ahmed has Gold until the end of the month and a PT pack that ends next week. Both are allowed at this branch and both are still active. The desk does not pick a plan. The door uses the **PT pack**, because it ends sooner.
+
+A live plan always beats a grace plan. So if Ahmed also has an old expired month with unused grace, the door still uses Gold or PT first, not the old grace plan.
+
+**Daily visit limit** is counted on the plan that was chosen. If that plan already had its visits for today, the door says “daily limit” even if another plan still has visits. In that case the desk should send `subscriptionId` for the other plan.
+
+**When to send `subscriptionId`:** the member has two products (gym + PT, two packs, old plan in grace plus a new one) and the receptionist must put the visit on a specific one. If they always have one live plan, omitting `subscriptionId` is fine.
+
+`POST /payments` is the desk write: cash or card, amount in major units of the gym currency (EGP). Omit `amount` to take the remaining due (`price` minus payments so far). Partials are allowed. Overpay is `PAYMENT_EXCEEDS_DUE`. Fully paid is `PAYMENT_ALREADY_SETTLED`. A free plan (`price` 0) is `PAYMENT_NOT_DUE`. Cancelled subscriptions and archived members cannot be charged. `memberId` and `currency` come from the subscription, not the body. List, get, and create return the receipt plus nested `member` (name, phone, status), `branch` (name), `staff` (name, role — no password), and `subscription` with sold terms and current `plan` name. Unpaid does not block check-in unless the gym turns on `requirePaymentForAccess`. Branch staff may only record a payment at their assigned branch. No void or refund in this phase.
 
 Freeze and grace are one policy for time plans and packs (`GET`/`PATCH /settings`). `freezeEnabled` is the master switch. `maxFreezeDays` is per freeze; `maxFreezeDaysPerYear` is a rolling year. Freezing pushes `endsAt` by `days`; unfreezing early gives unused days back. A scheduled freeze that reaches `freezeEndsAt` is settled back to `ACTIVE` on the next read. Renew is allowed only after `endsAt` (the paid period has ended, including during grace). It creates a **new** subscription for the same member and plan with a fresh session pack. Leftover sessions stay on the old row. `accessUntil` is `endsAt` plus `graceDays` when grace is on. At `endsAt` the row becomes `EXPIRED` (`expiredAt` set). `inGrace` is true while status is `IN_GRACE`, or while `EXPIRED` with unused grace and `now <= accessUntil`. The first successful check-in in that window sets status to `IN_GRACE`, sets `graceUsedAt` and `graceEndsAt` (the window frozen at that moment), and writes `SUBSCRIPTION_IN_GRACE`. After `graceEndsAt`, check-in is blocked and `IN_GRACE` settles back to `EXPIRED`. `graceUsedAt` stays set, so this sold plan cannot open a second grace window (even if staff later raise `graceDays`). Renew is a new row, so it can have its own grace. Frozen rows are not expired. Opening the inbox (or any subscription read, or the one-minute sweep) writes at most one `SUBSCRIPTION_EXPIRED` row at `endsAt`. `readAt` is shared by the gym. Email and member notifications are not in this phase.
 
@@ -171,7 +209,7 @@ npx prisma generate                        # TypeScript client only — does not
 - Gym-owned rows carry `tenant_id`. RLS + `FORCE` hide other gyms even from the table owner.
 - Session: `app.platform=on` (platform routes) or `app.tenant_id=<uuid>` (staff JWT). Set with `SET LOCAL` inside a transaction so pooled connections cannot leak.
 
-One freeze policy on `tenant_settings` covers time plans and session packs. Staff update it via `/settings`. At `endsAt`, `ACTIVE` becomes `EXPIRED` on the next staff read or on the background sweep. That write inserts a `SUBSCRIPTION_EXPIRED` inbox row. `IN_GRACE` is only set at the door.
+One freeze policy on `tenant_settings` covers time plans and session packs. Staff update it via `/settings`. `requirePaymentForAccess` (default off) plus `minPaidPercentForAccess` (default 50) can block the door until that share of the sold price is collected. At `endsAt`, `ACTIVE` becomes `EXPIRED` on the next staff read or on the background sweep. That write inserts a `SUBSCRIPTION_EXPIRED` inbox row. `IN_GRACE` is only set at the door.
 
 ---
 
@@ -188,4 +226,4 @@ The API image runs `prisma migrate deploy` then `node dist/main.js`. Jenkins tag
 
 ## Next
 
-**Phase 10 — Desk pay:** record a cash/card payment at the desk (no Stripe).
+**Phase 11 — Dashboard:** gym-level counts (members, active subscriptions, check-ins today, amounts due).

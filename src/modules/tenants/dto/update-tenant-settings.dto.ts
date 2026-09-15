@@ -30,4 +30,17 @@ export class UpdateTenantSettingsDto {
   @Min(0)
   @Max(365)
   maxFreezeDaysPerYear?: number;
+
+  /** When true, the door requires a minimum paid percent of the sold price. */
+  @IsOptional()
+  @IsBoolean()
+  requirePaymentForAccess?: boolean;
+
+  /** 0–100. Used when requirePaymentForAccess is true. Default 50. */
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(100)
+  minPaidPercentForAccess?: number;
 }

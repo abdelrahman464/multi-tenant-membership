@@ -1,15 +1,14 @@
 import { Prisma } from '@prisma/client';
 
-export const CHECKIN_FILTER_FIELDS = [
+export const PAYMENT_FILTER_FIELDS = [
   'memberId',
-  'branchId',
   'subscriptionId',
+  'branchId',
+  'method',
 ] as const;
-export const CHECKIN_SORT_FIELDS = ['checkedInAt'] as const;
+export const PAYMENT_SORT_FIELDS = ['paidAt', 'createdAt', 'amount'] as const;
 
-export const CHECKIN_LOOKBACK_MS = 48 * 60 * 60 * 1000;
-
-export const CHECKIN_INCLUDE = {
+export const PAYMENT_INCLUDE = {
   member: {
     select: { id: true, name: true, phone: true, status: true },
   },
@@ -27,6 +26,7 @@ export const CHECKIN_INCLUDE = {
       durationDays: true,
       sessionCount: true,
       sessionsRemaining: true,
+      price: true,
       startsAt: true,
       endsAt: true,
       plan: {
@@ -34,4 +34,4 @@ export const CHECKIN_INCLUDE = {
       },
     },
   },
-} satisfies Prisma.CheckInInclude;
+} satisfies Prisma.PaymentInclude;

@@ -9,6 +9,7 @@ export const MEMBER_PUBLIC_SELECT = {
   status: true,
   createdAt: true,
   updatedAt: true,
+  homeBranch: { select: { id: true, name: true } },
 } as const;
 
 export const MEMBER_SEARCH_FIELDS = ['name', 'phone', 'email'] as const;

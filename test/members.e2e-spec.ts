@@ -111,6 +111,7 @@ describe('Members (e2e)', () => {
     expect(created.body.phone).toBe('+201001234567');
     expect(created.body.tenantId).toBe(gymA.body.id);
     expect(created.body.homeBranchId).toBe(branchA);
+    expect(created.body.homeBranch).toEqual({ id: branchA, name: 'Maadi' });
     expect(created.body.status).toBe('ACTIVE');
 
     const duplicate = await request(app.getHttpServer())
@@ -136,6 +137,7 @@ describe('Members (e2e)', () => {
         expect.objectContaining({
           id: created.body.id,
           phone: '+201001234567',
+          homeBranch: { id: branchA, name: 'Maadi' },
         }),
       ]),
     );

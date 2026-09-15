@@ -1,39 +1,50 @@
-import { CheckIn, SubscriptionStatus } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import { CHECKIN_INCLUDE } from '../constants/check-in.constants';
+
+export type CheckInWithRelations = Prisma.CheckInGetPayload<{
+  include: typeof CHECKIN_INCLUDE;
+}>;
 
 export type PublicCheckIn = {
   id: string;
-  tenantId: string;
   memberId: string;
   subscriptionId: string;
-  branchId: string;
-  staffId: string;
   checkedInAt: Date;
   usedGrace: boolean;
-  status: SubscriptionStatus;
+  status: CheckInWithRelations['subscription']['status'];
   sessionsRemaining: number | null;
   visitsToday: number;
+  member: CheckInWithRelations['member'];
+  branch: CheckInWithRelations['branch'];
+  staff: CheckInWithRelations['staff'];
+  subscription: CheckInWithRelations['subscription'];
 };
 
 export function toPublicCheckIn(
-  row: CheckIn,
+  row: CheckInWithRelations,
   extras: {
     usedGrace: boolean;
-    status: SubscriptionStatus;
+    status: CheckInWithRelations['subscription']['status'];
     sessionsRemaining: number | null;
     visitsToday: number;
   },
 ): PublicCheckIn {
   return {
     id: row.id,
-    tenantId: row.tenantId,
     memberId: row.memberId,
     subscriptionId: row.subscriptionId,
-    branchId: row.branchId,
-    staffId: row.staffId,
     checkedInAt: row.checkedInAt,
     usedGrace: extras.usedGrace,
     status: extras.status,
     sessionsRemaining: extras.sessionsRemaining,
     visitsToday: extras.visitsToday,
+    member: row.member,
+    branch: row.branch,
+    staff: row.staff,
+    subscription: {
+      ...row.subscription,
+      status: extras.status,
+      sessionsRemaining: extras.sessionsRemaining,
+    },
   };
 }

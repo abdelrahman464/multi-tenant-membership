@@ -130,6 +130,34 @@ describe('Check-ins (e2e)', () => {
     expect(first.body.usedGrace).toBe(false);
     expect(first.body.sessionsRemaining).toBe(7);
     expect(first.body.visitsToday).toBe(1);
+    expect(first.body.memberId).toBe(member.body.id);
+    expect(first.body.subscriptionId).toBe(paid.body.id);
+    expect(first.body.member).toEqual({
+      id: member.body.id,
+      name: 'Ahmed Hassan',
+      phone: '+201003330001',
+      status: 'ACTIVE',
+    });
+    expect(first.body.branch).toEqual({ id: branchId, name: 'Maadi' });
+    expect(first.body.staff).toEqual({
+      id: login.body.staff.id,
+      name: 'Owner',
+      role: 'TENANT_OWNER',
+    });
+    expect(first.body.staff.password).toBeUndefined();
+    expect(first.body.subscription).toEqual(
+      expect.objectContaining({
+        id: paid.body.id,
+        planName: 'Gold 30',
+        status: 'ACTIVE',
+        sessionsRemaining: 7,
+      }),
+    );
+    expect(first.body.subscription.plan).toEqual({
+      id: plan.body.id,
+      name: 'Gold 30',
+      status: 'ACTIVE',
+    });
 
     const limited = await request(app.getHttpServer())
       .post('/api/v1/checkIns')
@@ -267,5 +295,184 @@ describe('Check-ins (e2e)', () => {
       .set('Authorization', `Bearer ${token}`)
       .expect(200);
     expect(listed.body.total).toBe(0);
+  });
+
+  it('blocks the door until the gym min paid percent is met', async () => {
+    if (!ready) {
+      console.warn(
+        'Skipping check-in DB tests: docker compose up -d postgres redis && npx prisma migrate deploy',
+      );
+      return;
+    }
+
+    const suffix = `${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+    const password = 'Password1!';
+    const slug = `paywall-${suffix}`;
+
+    const gym = await request(app.getHttpServer())
+      .post('/api/v1/platform/tenants')
+      .set(PLATFORM_API_KEY_HEADER, platformKey)
+      .send({
+        name: 'Paywall Gym',
+        slug,
+        firstBranch: { name: 'Maadi' },
+        firstOwner: {
+          name: 'Owner',
+          email: `owner-${suffix}@example.com`,
+          password,
+        },
+      })
+      .expect(201);
+
+    const branchId = gym.body.branches[0].id as string;
+    const login = await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .send({
+        slug,
+        email: `owner-${suffix}@example.com`,
+        password,
+      })
+      .expect(201);
+    const token = login.body.accessToken as string;
+
+    const member = await request(app.getHttpServer())
+      .post('/api/v1/members')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        name: 'Ahmed Hassan',
+        phone: '+201003330009',
+        homeBranchId: branchId,
+      })
+      .expect(201);
+
+    const plan = await request(app.getHttpServer())
+      .post('/api/v1/plans')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        name: 'Gold 30',
+        durationDays: 30,
+        sessionCount: 8,
+        maxVisitsPerDay: 3,
+        price: 1500,
+      })
+      .expect(201);
+
+    const free = await request(app.getHttpServer())
+      .post('/api/v1/plans')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        name: 'Comp pass',
+        durationDays: 7,
+        price: 0,
+      })
+      .expect(201);
+
+    const paid = await request(app.getHttpServer())
+      .post('/api/v1/subscriptions')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ memberId: member.body.id, planId: plan.body.id })
+      .expect(201);
+
+    const zeroPercent = await request(app.getHttpServer())
+      .patch('/api/v1/settings')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ requirePaymentForAccess: true, minPaidPercentForAccess: 0 })
+      .expect(400);
+    expect(zeroPercent.body.code).toBe(ErrorCode.MIN_PAID_PERCENT_REQUIRED);
+
+    await request(app.getHttpServer())
+      .patch('/api/v1/settings')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ requirePaymentForAccess: true, minPaidPercentForAccess: 50 })
+      .expect(200);
+
+    const unpaid = await request(app.getHttpServer())
+      .post('/api/v1/checkIns')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        memberId: member.body.id,
+        branchId,
+        subscriptionId: paid.body.id,
+      })
+      .expect(400);
+    expect(unpaid.body.code).toBe(ErrorCode.CHECKIN_PAYMENT_REQUIRED);
+
+    await request(app.getHttpServer())
+      .post('/api/v1/payments')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        subscriptionId: paid.body.id,
+        branchId,
+        method: 'CASH',
+        amount: 500,
+      })
+      .expect(201);
+
+    const underHalf = await request(app.getHttpServer())
+      .post('/api/v1/checkIns')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        memberId: member.body.id,
+        branchId,
+        subscriptionId: paid.body.id,
+      })
+      .expect(400);
+    expect(underHalf.body.code).toBe(ErrorCode.CHECKIN_PAYMENT_REQUIRED);
+
+    await request(app.getHttpServer())
+      .post('/api/v1/payments')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        subscriptionId: paid.body.id,
+        branchId,
+        method: 'CASH',
+        amount: 250,
+      })
+      .expect(201);
+
+    const halfPaid = await request(app.getHttpServer())
+      .post('/api/v1/checkIns')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        memberId: member.body.id,
+        branchId,
+        subscriptionId: paid.body.id,
+      })
+      .expect(201);
+    expect(halfPaid.body.status).toBe('ACTIVE');
+
+    await request(app.getHttpServer())
+      .patch('/api/v1/settings')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ minPaidPercentForAccess: 100 })
+      .expect(200);
+
+    const notFull = await request(app.getHttpServer())
+      .post('/api/v1/checkIns')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        memberId: member.body.id,
+        branchId,
+        subscriptionId: paid.body.id,
+      })
+      .expect(400);
+    expect(notFull.body.code).toBe(ErrorCode.CHECKIN_PAYMENT_REQUIRED);
+
+    const comp = await request(app.getHttpServer())
+      .post('/api/v1/subscriptions')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ memberId: member.body.id, planId: free.body.id })
+      .expect(201);
+
+    const freeVisit = await request(app.getHttpServer())
+      .post('/api/v1/checkIns')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        memberId: member.body.id,
+        branchId,
+        subscriptionId: comp.body.id,
+      })
+      .expect(201);
+    expect(freeVisit.body.status).toBe('ACTIVE');
   });
 });

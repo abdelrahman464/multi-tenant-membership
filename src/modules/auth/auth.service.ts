@@ -8,7 +8,7 @@ import { HashService } from '../../common/security/hash.service';
 import { TokenService } from '../../common/tokens/token.service';
 import { AuthenticatedUser } from '../../common/types/authenticated-user.type';
 import { StaffRepository } from '../staff/repository/staff.repository';
-import { toPublicStaff } from '../staff/staff.mapper';
+import { PublicBranchRef, toPublicStaff } from '../staff/staff.mapper';
 import { AuthSessionService } from './auth-session.service';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { LoginDto } from './dto/login.dto';
@@ -23,6 +23,7 @@ type StaffWithPassword = {
   password: string;
   role: import('@prisma/client').StaffRole;
   branchId: string | null;
+  branch: PublicBranchRef | null;
   sessionVersion: number;
   createdAt: Date;
   updatedAt: Date;
@@ -79,7 +80,10 @@ export class AuthService {
         'Staff not found',
       );
     }
-    return toPublicStaff(staff);
+    return {
+      ...toPublicStaff(staff),
+      tenant: await this.requireSessionTenant(actor.tenantId),
+    };
   }
 
   listSessions(req: Request, userId: string): Promise<AuthSessionView[]> {
@@ -255,6 +259,18 @@ export class AuthService {
       staff: toPublicStaff(staff),
       accessToken,
     };
+  }
+
+  private async requireSessionTenant(tenantId: string) {
+    const tenant = await this.staffRepository.findSessionTenant(tenantId);
+    if (!tenant) {
+      throw new AppHttpException(
+        HttpStatus.UNAUTHORIZED,
+        ErrorCode.STAFF_NOT_FOUND,
+        'Staff not found',
+      );
+    }
+    return tenant;
   }
 
   private readRefreshSid(req: Request): string | undefined {

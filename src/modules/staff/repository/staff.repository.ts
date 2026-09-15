@@ -4,6 +4,7 @@ import { ErrorCode } from '../../../common/constants/error-codes';
 import { AppHttpException } from '../../../common/errors/app-http.exception';
 import { ApiFeatures } from '../../../common/utils/api-features.utils';
 import { PrismaService } from '../../../database/prisma.service';
+import { SESSION_TENANT_SELECT } from '../../tenants/constants/tenant.constants';
 import {
   STAFF_FILTER_FIELDS,
   STAFF_PUBLIC_SELECT,
@@ -26,10 +27,22 @@ export class StaffRepository {
     );
   }
 
+  findSessionTenant(tenantId: string) {
+    return this.prisma.withTenant(tenantId, (tx) =>
+      tx.tenant.findUnique({
+        where: { id: tenantId },
+        select: SESSION_TENANT_SELECT,
+      }),
+    );
+  }
+
   findByEmailWithPassword(tenantId: string, email: string) {
     return this.prisma.withTenant(tenantId, (tx) =>
       tx.staff.findUnique({
         where: { tenantId_email: { tenantId, email } },
+        include: {
+          branch: { select: { id: true, name: true } },
+        },
       }),
     );
   }
@@ -38,7 +51,10 @@ export class StaffRepository {
     return this.prisma.withTenant(tenantId, (tx) =>
       tx.staff.findFirst({
         where: { id, tenantId },
-        include: { tenant: { select: { id: true, status: true } } },
+        include: {
+          branch: { select: { id: true, name: true } },
+          tenant: { select: { id: true, status: true } },
+        },
       }),
     );
   }
@@ -134,6 +150,9 @@ export class StaffRepository {
           ...(options.bumpSessionVersion
             ? { sessionVersion: { increment: 1 } }
             : {}),
+        },
+        include: {
+          branch: { select: { id: true, name: true } },
         },
       }),
     );

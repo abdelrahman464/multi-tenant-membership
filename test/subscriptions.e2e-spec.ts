@@ -134,6 +134,18 @@ describe('Subscriptions (e2e)', () => {
     expect(timeSub.body.sessionsRemaining).toBeNull();
     expect(timeSub.body.maxVisitsPerDay).toBe(1);
     expect(timeSub.body.status).toBe('ACTIVE');
+    expect(timeSub.body.member).toEqual({
+      id: member.body.id,
+      name: 'Ahmed Hassan',
+      phone: '+201009998887',
+      status: 'ACTIVE',
+    });
+    expect(timeSub.body.plan).toEqual({
+      id: monthly.body.id,
+      name: 'Gold 30',
+      status: 'ACTIVE',
+    });
+    expect(timeSub.body.branches).toEqual([{ id: branchA, name: 'Maadi' }]);
     expect(new Date(timeSub.body.endsAt).getTime()).toBeGreaterThan(
       new Date(timeSub.body.startsAt).getTime(),
     );
@@ -153,6 +165,48 @@ describe('Subscriptions (e2e)', () => {
       .set('Authorization', `Bearer ${tokenA}`)
       .expect(200);
     expect(listed.body.total).toBe(2);
+    expect(listed.body.data[0].member.name).toBe('Ahmed Hassan');
+    expect(listed.body.data[0].plan.name).toEqual(expect.any(String));
+    expect(listed.body.data[0].branches[0]).toEqual(
+      expect.objectContaining({ id: branchA, name: 'Maadi' }),
+    );
+
+    const second = await request(app.getHttpServer())
+      .post(`/api/v1/platform/tenants/${gymA.body.id}/branches`)
+      .set(PLATFORM_API_KEY_HEADER, platformKey)
+      .send({ name: 'Heliopolis' })
+      .expect(201);
+
+    const allLocations = await request(app.getHttpServer())
+      .get(`/api/v1/subscriptions/${timeSub.body.id}`)
+      .set('Authorization', `Bearer ${tokenA}`)
+      .expect(200);
+    expect(allLocations.body.allBranches).toBe(true);
+    expect(allLocations.body.branches).toEqual([
+      { id: second.body.id, name: 'Heliopolis' },
+      { id: branchA, name: 'Maadi' },
+    ]);
+
+    const selected = await request(app.getHttpServer())
+      .post('/api/v1/plans')
+      .set('Authorization', `Bearer ${tokenA}`)
+      .send({
+        name: 'Maadi only',
+        durationDays: 30,
+        sessionCount: 4,
+        price: 800,
+        allBranches: false,
+        branchIds: [branchA],
+      })
+      .expect(201);
+
+    const selectedSub = await request(app.getHttpServer())
+      .post('/api/v1/subscriptions')
+      .set('Authorization', `Bearer ${tokenA}`)
+      .send({ memberId: member.body.id, planId: selected.body.id })
+      .expect(201);
+    expect(selectedSub.body.allBranches).toBe(false);
+    expect(selectedSub.body.branches).toEqual([{ id: branchA, name: 'Maadi' }]);
 
     const loginB = await request(app.getHttpServer())
       .post('/api/v1/auth/login')

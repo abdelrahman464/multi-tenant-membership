@@ -1,24 +1,17 @@
 import { Prisma } from '@prisma/client';
+import { SUBSCRIPTION_INCLUDE } from '../constants/subscription.constants';
 import {
   accessUntilOf,
   graceDaysFromSettings,
   isCalendarGrace,
 } from '../utils/access.util';
 
-type SubscriptionRow = Prisma.SubscriptionGetPayload<{
-  include: {
-    tenant: {
-      select: {
-        currency: true;
-        settings: { select: { graceEnabled: true; graceDays: true } };
-      };
-    };
-  };
+export type SubscriptionRow = Prisma.SubscriptionGetPayload<{
+  include: typeof SUBSCRIPTION_INCLUDE;
 }>;
 
 export type PublicSubscription = {
   id: string;
-  tenantId: string;
   memberId: string;
   planId: string;
   planName: string;
@@ -40,7 +33,13 @@ export type PublicSubscription = {
   inGrace: boolean;
   status: SubscriptionRow['status'];
   createdAt: Date;
-  updatedAt: Date;
+  member: SubscriptionRow['member'];
+  plan: {
+    id: string;
+    name: string;
+    status: SubscriptionRow['plan']['status'];
+  };
+  branches: { id: string; name: string }[];
 };
 
 export function toPublicSubscription(
@@ -57,7 +56,6 @@ export function toPublicSubscription(
 
   return {
     id: row.id,
-    tenantId: row.tenantId,
     memberId: row.memberId,
     planId: row.planId,
     planName: row.planName,
@@ -79,6 +77,19 @@ export function toPublicSubscription(
     inGrace,
     status: row.status,
     createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
+    member: row.member,
+    plan: {
+      id: row.plan.id,
+      name: row.plan.name,
+      status: row.plan.status,
+    },
+    branches: allowedBranches(row),
   };
+}
+
+function allowedBranches(row: SubscriptionRow): { id: string; name: string }[] {
+  const rows = row.allBranches
+    ? row.tenant.branches
+    : row.plan.branches.map((link) => link.branch);
+  return [...rows].sort((a, b) => a.name.localeCompare(b.name));
 }
