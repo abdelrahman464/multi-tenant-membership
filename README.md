@@ -2,7 +2,7 @@
 
 Staff-only B2B API for gyms and academies. One Postgres database, many tenants (businesses), branches as locations. Isolation is `tenant_id` plus **row-level security (RLS)**.
 
-**Phase 15 (current):** payment PDF receipt. Staff can download one collection as a printable file (member and plan names, not UUIDs).
+**Phase 16 (current):** void a desk payment. Owner/admin can reverse a mistaken collection without deleting the receipt.
 
 | | |
 |---|---|
@@ -127,13 +127,14 @@ Roles: `TENANT_OWNER`, `ADMIN`, `BRANCH_STAFF`. Role is loaded from the database
 | POST | `/api/v1/notifications/readAll` | Any staff |
 | GET | `/api/v1/checkIns` | Any staff (`memberId`, `branchId`, `subscriptionId`, `sort`, `page`, `limit`) |
 | POST | `/api/v1/checkIns` | Any staff (`memberId` + `branchId`, optional `subscriptionId`) |
-| GET | `/api/v1/payments` | Any staff (`memberId`, `subscriptionId`, `planId`, `branchId`, `method`, `sort`, `page`, `limit`) |
+| GET | `/api/v1/payments` | Any staff (`memberId`, `subscriptionId`, `planId`, `branchId`, `method`, `status`, `sort`, `page`, `limit`) |
 | POST | `/api/v1/payments` | Any staff (`subscriptionId` + `branchId` + `method`, optional `amount` / `notes`) |
+| POST | `/api/v1/payments/:id/void` | Owner, admin (`reason`) |
 | GET | `/api/v1/payments/:id` | Any staff |
 | GET | `/api/v1/payments/:id/receipt` | Any staff (PDF) |
 | GET | `/api/v1/dashboard` | Any staff (`from`, `to` as `YYYY-MM-DD`; gym counts + collections in that range) |
 | GET | `/api/v1/reports/members` | Any staff (CSV; `search`, `status`, `homeBranchId`) |
-| GET | `/api/v1/reports/payments` | Any staff (CSV; `from`, `to`, `memberId`, `subscriptionId`, `planId`, `branchId`, `method`) |
+| GET | `/api/v1/reports/payments` | Any staff (CSV; `from`, `to`, `memberId`, `subscriptionId`, `planId`, `branchId`, `method`, `status`) |
 | GET | `/api/v1/reports/checkIns` | Any staff (CSV; `from`, `to`, `memberId`, `branchId`, `subscriptionId`) |
 | GET | `/api/v1/reports/subscriptions` | Any staff (CSV; `memberId`, `planId`, `status`, `unpaid`, `inProgress`, `completedUnrenewed`, `expired`) |
 | GET | `/api/v1/audit` | Owner, admin (`action`, `staffId`, `entityType`, `entityId`, `from`, `to`, `sort`, `page`, `limit`) |
@@ -179,7 +180,9 @@ A live plan always beats a grace plan. So if Ahmed also has an old expired month
 
 **When to send `subscriptionId`:** the member has two products (gym + PT, two packs, old plan in grace plus a new one) and the receptionist must put the visit on a specific one. If they always have one live plan, omitting `subscriptionId` is fine.
 
-`POST /payments` is the desk write: cash or card, amount in major units of the gym currency (EGP). Omit `amount` to take the remaining due (`price` minus payments so far). Partials are allowed. Overpay is `PAYMENT_EXCEEDS_DUE`. Fully paid is `PAYMENT_ALREADY_SETTLED`. A free plan (`price` 0) is `PAYMENT_NOT_DUE`. Cancelled subscriptions and archived members cannot be charged. `memberId` and `currency` come from the subscription, not the body. List, get, and create return the receipt plus nested `member` (name, phone, status), `branch` (name), `staff` (name, role — no password), and `subscription` with sold terms and current `plan` name. `GET /payments/:id/receipt` is the same row as a PDF (gym, member, plan, amount, remaining due). In Postman use **Send and Download**. Gym B cannot print gym A’s payment (`404`). Unpaid does not block check-in unless the gym turns on `requirePaymentForAccess`. Branch staff may only record a payment at their assigned branch. No void or refund in this phase.
+`POST /payments` is the desk write: cash or card, amount in major units of the gym currency (EGP). Omit `amount` to take the remaining due (`price` minus payments so far). Partials are allowed. Overpay is `PAYMENT_EXCEEDS_DUE`. Fully paid is `PAYMENT_ALREADY_SETTLED`. A free plan (`price` 0) is `PAYMENT_NOT_DUE`. Cancelled subscriptions and archived members cannot be charged. `memberId` and `currency` come from the subscription, not the body. List, get, and create return the receipt plus nested `member` (name, phone, status), `branch` (name), `staff` (name, role — no password), and `subscription` with sold terms and current `plan` name. `status` is `COLLECTED` until voided. `GET /payments/:id/receipt` is the same row as a PDF (gym, member, plan, amount, remaining due). In Postman use **Send and Download**. Gym B cannot print gym A’s payment (`404`). Unpaid does not block check-in unless the gym turns on `requirePaymentForAccess`. Branch staff may only record a payment at their assigned branch.
+
+`POST /payments/:id/void` is owner/admin only. It does **not** delete the row. The receipt stays (`VOIDED`, `voidedAt`, `voidReason`); paid total and due ignore it, so the desk can collect again. Void twice is `PAYMENT_ALREADY_VOIDED`. Branch staff get `403`. Gym B gets `404`. Dashboard collections and door payment-percent count only `COLLECTED` rows. There is no card-network refund (this is not Stripe).
 
 `GET /dashboard` is the morning screen. Optional `from` and `to` (`YYYY-MM-DD`, gym calendar, inclusive, max 366 days) filter **activity**: check-ins, collections, and members who joined in that window. Omit both to use today. Members on the books, live/frozen/grace/expired sold plans, ending-soon (7 days), `completedUnrenewed` (same rule as `GET /subscriptions?completedUnrenewed=true`), and remaining **due** are always *now*, not historical. Check-ins include unique members and a per-branch split. Collections split cash vs card. Fully paid and free plans (`price` 0) are not in `due`. Gym B never sees gym A’s numbers.
 
@@ -187,7 +190,7 @@ A live plan always beats a grace plan. So if Ahmed also has an old expired month
 
 Rate limits are per client IP in Redis (skipped in tests). Defaults: login 20/min, refresh 60/min, reports 30/min, platform 60/min, other API 180/min. Over the cap is `429 RATE_LIMITED` with `Retry-After`. If Redis is down, the limiter fails open so the desk is not locked; login still needs Redis for sessions. `/health` is not limited.
 
-`GET /audit` is the owner/admin trail of **writes** (login, password change, members, plans, staff, subscriptions, check-ins, payments, settings, CSV export, payment PDF). No GET lists, no passwords or tokens. Optional gym-calendar `from`/`to` (max 366 days). Gym B never sees gym A’s rows. Branch staff cannot read the log.
+`GET /audit` is the owner/admin trail of **writes** (login, password change, members, plans, staff, subscriptions, check-ins, payments, payment void, settings, CSV export, payment PDF). No GET lists, no passwords or tokens. Optional gym-calendar `from`/`to` (max 366 days). Gym B never sees gym A’s rows. Branch staff cannot read the log.
 
 Freeze and grace are one policy for time plans and packs (`GET`/`PATCH /settings`). `freezeEnabled` is the master switch. `maxFreezeDays` is per freeze; `maxFreezeDaysPerYear` is a rolling year. Freezing pushes `endsAt` by `days`; unfreezing early gives unused days back. A scheduled freeze that reaches `freezeEndsAt` is settled back to `ACTIVE` on the next read. Renew is allowed only after `endsAt` (the paid period has ended, including during grace). It creates a **new** subscription for the same member and plan with a fresh session pack. Leftover sessions stay on the old row. `accessUntil` is `endsAt` plus `graceDays` when grace is on. At `endsAt` the row becomes `EXPIRED` (`expiredAt` set). `inGrace` is true while status is `IN_GRACE`, or while `EXPIRED` with unused grace and `now <= accessUntil`. The first successful check-in in that window sets status to `IN_GRACE`, sets `graceUsedAt` and `graceEndsAt` (the window frozen at that moment), and writes `SUBSCRIPTION_IN_GRACE`. After `graceEndsAt`, check-in is blocked and `IN_GRACE` settles back to `EXPIRED`. `graceUsedAt` stays set, so this sold plan cannot open a second grace window (even if staff later raise `graceDays`). Renew is a new row, so it can have its own grace. Frozen rows are not expired. Opening the inbox (or any subscription read, or the one-minute sweep) writes at most one `SUBSCRIPTION_EXPIRED` row at `endsAt`. `readAt` is shared by the gym. Email and member notifications are not in this phase.
 
@@ -241,4 +244,4 @@ The API image runs `prisma migrate deploy` then `node dist/main.js`. Jenkins tag
 
 ## Next
 
-**Forgot password / WhatsApp / SMS:** still need a real mailer or messaging provider. Payment void/refund is not in this phase.
+**Forgot password / WhatsApp / SMS:** still need a real mailer or messaging provider.

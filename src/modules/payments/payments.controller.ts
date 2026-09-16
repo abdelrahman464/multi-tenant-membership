@@ -12,11 +12,14 @@ import {
 import { Response } from 'express';
 import { GetAuthUser } from '../../common/decorators/get-auth-user.decorator';
 import { Audit } from '../../common/decorators/audit.decorator';
+import { Roles } from '../../common/decorators/roles.decorator';
 import { ParseUuidPipe } from '../../common/pipes/parse-uuid.pipe';
 import { AuthenticatedUser } from '../../common/types/authenticated-user.type';
+import { StaffRole } from '../staff/enums/staff-role.enum';
 import { AuditAction } from '../audit/enums/audit-action.enum';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { ListPaymentsQueryDto } from './dto/list-payments-query.dto';
+import { VoidPaymentDto } from './dto/void-payment.dto';
 import { PaymentsService } from './payments.service';
 import { applyPdfDownloadHeaders } from './utils/receipt-pdf.util';
 
@@ -40,6 +43,18 @@ export class PaymentsController {
     @Body() dto: CreatePaymentDto,
   ) {
     return this.paymentsService.create(actor, dto);
+  }
+
+  @Post(':id/void')
+  @HttpCode(HttpStatus.OK)
+  @Roles(StaffRole.TENANT_OWNER, StaffRole.ADMIN)
+  @Audit({ action: AuditAction.PAYMENT_VOIDED, entityType: 'payment' })
+  void(
+    @GetAuthUser() actor: AuthenticatedUser,
+    @Param('id', ParseUuidPipe) id: string,
+    @Body() dto: VoidPaymentDto,
+  ) {
+    return this.paymentsService.void(actor, id, dto);
   }
 
   @Get(':id/receipt')

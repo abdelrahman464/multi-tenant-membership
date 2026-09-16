@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { Prisma, SubscriptionStatus } from '@prisma/client';
+import { Prisma, SubscriptionStatus, PaymentStatus } from '@prisma/client';
 import { ErrorCode } from '../../../common/constants/error-codes';
 import { AppHttpException } from '../../../common/errors/app-http.exception';
 import { ApiFeatures } from '../../../common/utils/api-features.utils';
@@ -642,7 +642,11 @@ export class SubscriptionsRepository {
     }
     const grouped = await tx.payment.groupBy({
       by: ['subscriptionId'],
-      where: { tenantId, subscriptionId: { in: subscriptionIds } },
+      where: {
+        tenantId,
+        subscriptionId: { in: subscriptionIds },
+        status: PaymentStatus.COLLECTED,
+      },
       _sum: { amount: true },
     });
     for (const row of grouped) {

@@ -5,6 +5,7 @@ export const PAYMENT_FILTER_FIELDS = [
   'subscriptionId',
   'branchId',
   'method',
+  'status',
 ] as const;
 export const PAYMENT_SORT_FIELDS = ['paidAt', 'createdAt', 'amount'] as const;
 

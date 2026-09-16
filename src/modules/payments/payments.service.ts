@@ -4,6 +4,7 @@ import { AppHttpException } from '../../common/errors/app-http.exception';
 import { AuthenticatedUser } from '../../common/types/authenticated-user.type';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { ListPaymentsQueryDto } from './dto/list-payments-query.dto';
+import { VoidPaymentDto } from './dto/void-payment.dto';
 import { PaymentsRepository } from './repository/payments.repository';
 import {
   buildPaymentReceiptPdf,
@@ -54,6 +55,10 @@ export class PaymentsService {
       amount: dto.amount,
       notes: dto.notes,
     });
+  }
+
+  void(actor: AuthenticatedUser, id: string, dto: VoidPaymentDto) {
+    return this.paymentsRepository.void(actor, id, dto.reason);
   }
 
   private async requirePayment(actor: AuthenticatedUser, id: string) {

@@ -1,5 +1,5 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, PaymentStatus } from '@prisma/client';
 import { ErrorCode } from '../../../common/constants/error-codes';
 import { AppHttpException } from '../../../common/errors/app-http.exception';
 import { AuthenticatedUser } from '../../../common/types/authenticated-user.type';
@@ -189,6 +189,42 @@ export class PaymentsRepository {
     });
   }
 
+  void(actor: AuthenticatedUser, id: string, reason: string) {
+    return this.prisma.withTenant(actor.tenantId, async (tx) => {
+      const row = await this.loadPayment(tx, actor.tenantId, id);
+      if (!row) {
+        throw new AppHttpException(
+          HttpStatus.NOT_FOUND,
+          ErrorCode.PAYMENT_NOT_FOUND,
+          'Payment not found',
+        );
+      }
+      if (row.status === PaymentStatus.VOIDED) {
+        throw new AppHttpException(
+          HttpStatus.BAD_REQUEST,
+          ErrorCode.PAYMENT_ALREADY_VOIDED,
+          'This payment is already voided',
+        );
+      }
+
+      const updated = await tx.payment.update({
+        where: { id },
+        data: {
+          status: PaymentStatus.VOIDED,
+          voidedAt: new Date(),
+          voidedById: actor.id,
+          voidReason: reason.trim(),
+        },
+        include: PAYMENT_INCLUDE,
+      });
+      const paidTotal =
+        (
+          await this.paidTotals(tx, actor.tenantId, [updated.subscriptionId])
+        ).get(updated.subscriptionId) ?? 0;
+      return toPublicPayment(updated, { paidTotal });
+    });
+  }
+
   private async loadPayment(
     tx: Prisma.TransactionClient,
     tenantId: string,
@@ -224,7 +260,11 @@ export class PaymentsRepository {
     // get the total paid for each subscription
     const grouped = await tx.payment.groupBy({
       by: ['subscriptionId'],
-      where: { tenantId, subscriptionId: { in: unique } },
+      where: {
+        tenantId,
+        subscriptionId: { in: unique },
+        status: PaymentStatus.COLLECTED,
+      },
       _sum: { amount: true },
     });
     for (const row of grouped) {

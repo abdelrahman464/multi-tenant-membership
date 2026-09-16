@@ -88,8 +88,11 @@ export function buildPaymentReceiptPdf(
     doc
       .font('Cairo')
       .fontSize(14)
-      .fillColor('#111')
-      .text('Payment receipt', { align: 'center' });
+      .fillColor(payment.status === 'VOIDED' ? '#b42318' : '#111')
+      .text(
+        payment.status === 'VOIDED' ? 'VOIDED receipt' : 'Payment receipt',
+        { align: 'center' },
+      );
     doc.moveDown(1);
 
     const line = (label: string, value: string) => {
@@ -109,11 +112,15 @@ export function buildPaymentReceiptPdf(
     line('Plan', payment.subscription.planName);
     line('Amount', money(payment.amount));
     line('Method', payment.method);
+    line('Status', payment.status);
     line('Paid at', paidAt);
     line('Staff', payment.staff.name);
     line('Branch', payment.branch.name);
     if (payment.notes) {
       line('Notes', payment.notes);
+    }
+    if (payment.voidReason) {
+      line('Void reason', payment.voidReason);
     }
     doc.moveDown(0.8);
     line('Plan price', money(payment.price));

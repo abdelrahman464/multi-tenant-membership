@@ -1,5 +1,6 @@
 import { StaffRole } from '../../staff/enums/staff-role.enum';
 import { PaymentMethod } from '../enums/payment-method.enum';
+import { PaymentStatus } from '../enums/payment-status.enum';
 import { PublicPayment } from '../mappers/payment.mapper';
 import {
   buildPaymentReceiptPdf,
@@ -10,10 +11,13 @@ import {
 const payment: PublicPayment = {
   id: '11111111-1111-4111-8111-111111111111',
   method: PaymentMethod.CASH,
+  status: PaymentStatus.COLLECTED,
   amount: 400,
   currency: 'EGP',
   notes: 'Partial, desk',
+  voidReason: null,
   paidAt: new Date('2026-09-16T14:30:00.000Z'),
+  voidedAt: null,
   price: 1000,
   paidTotal: 400,
   dueAmount: 600,

@@ -9,6 +9,7 @@ import {
   Min,
 } from 'class-validator';
 import { PaymentMethod } from '../enums/payment-method.enum';
+import { PaymentStatus } from '../enums/payment-status.enum';
 
 export class ListPaymentsQueryDto {
   @IsOptional()
@@ -30,6 +31,10 @@ export class ListPaymentsQueryDto {
   @IsOptional()
   @IsEnum(PaymentMethod)
   method?: PaymentMethod;
+
+  @IsOptional()
+  @IsEnum(PaymentStatus)
+  status?: PaymentStatus;
 
   @IsOptional()
   @IsString()

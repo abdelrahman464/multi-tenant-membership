@@ -2,7 +2,7 @@
   "name": "membership-api",
   "version": "0.1.0",
   "private": true,
-  "description": "Staff-facing multi-tenant membership API. Phase 15: payment PDF receipts.",
+  "description": "Staff-facing multi-tenant membership API. Phase 16: void desk payments.",
   "engines": {
     "node": ">=22.12.0"
   },

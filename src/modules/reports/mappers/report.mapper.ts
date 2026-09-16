@@ -29,6 +29,7 @@ export function paymentCsvRow(
   row: {
     paidAt: Date;
     method: string;
+    status: string;
     amount: { toString(): string } | number;
     currency: string;
     notes: string | null;
@@ -47,6 +48,7 @@ export function paymentCsvRow(
   return [
     row.paidAt,
     row.method,
+    row.status,
     roundMoney(Number(row.amount)),
     row.currency,
     row.notes,

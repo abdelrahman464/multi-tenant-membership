@@ -1,5 +1,5 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, PaymentStatus } from '@prisma/client';
 import { ErrorCode } from '../../../common/constants/error-codes';
 import { AppHttpException } from '../../../common/errors/app-http.exception';
 import { AuthenticatedUser } from '../../../common/types/authenticated-user.type';
@@ -409,7 +409,11 @@ export class CheckInsRepository {
     }
     const grouped = await tx.payment.groupBy({
       by: ['subscriptionId'],
-      where: { tenantId, subscriptionId: { in: unique } },
+      where: {
+        tenantId,
+        subscriptionId: { in: unique },
+        status: PaymentStatus.COLLECTED,
+      },
       _sum: { amount: true },
     });
     for (const row of grouped) {

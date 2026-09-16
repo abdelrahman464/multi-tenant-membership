@@ -188,6 +188,7 @@ describe('Payments (e2e)', () => {
     expect(first.body.paidTotal).toBe(500);
     expect(first.body.dueAmount).toBe(1000);
     expect(first.body.method).toBe('CASH');
+    expect(first.body.status).toBe('COLLECTED');
     expect(first.body.member).toEqual({
       id: memberA.body.id,
       name: 'Ahmed Hassan',
@@ -433,6 +434,63 @@ describe('Payments (e2e)', () => {
       .expect(200);
     expect(byExtraPlan.body.total).toBe(1);
     expect(byExtraPlan.body.data[0].id).toBe(deskPay.body.id);
+
+    const voided = await request(app.getHttpServer())
+      .post(`/api/v1/payments/${first.body.id}/void`)
+      .set('Authorization', `Bearer ${tokenA}`)
+      .send({ reason: 'Wrong amount at desk' })
+      .expect(200);
+    expect(voided.body.status).toBe('VOIDED');
+    expect(voided.body.voidReason).toBe('Wrong amount at desk');
+    expect(voided.body.paidTotal).toBe(1000);
+    expect(voided.body.dueAmount).toBe(500);
+
+    const afterVoid = await request(app.getHttpServer())
+      .get(`/api/v1/subscriptions/${paid.body.id}`)
+      .set('Authorization', `Bearer ${tokenA}`)
+      .expect(200);
+    expect(afterVoid.body.paidTotal).toBe(1000);
+    expect(afterVoid.body.dueAmount).toBe(500);
+
+    const voidedList = await request(app.getHttpServer())
+      .get('/api/v1/payments?status=VOIDED')
+      .set('Authorization', `Bearer ${tokenA}`)
+      .expect(200);
+    expect(voidedList.body.total).toBe(1);
+    expect(voidedList.body.data[0].id).toBe(first.body.id);
+
+    const twice = await request(app.getHttpServer())
+      .post(`/api/v1/payments/${first.body.id}/void`)
+      .set('Authorization', `Bearer ${tokenA}`)
+      .send({ reason: 'Try again' })
+      .expect(400);
+    expect(twice.body.code).toBe(ErrorCode.PAYMENT_ALREADY_VOIDED);
+
+    const otherGymVoid = await request(app.getHttpServer())
+      .post(`/api/v1/payments/${first.body.id}/void`)
+      .set('Authorization', `Bearer ${tokenB}`)
+      .send({ reason: 'Not this gym' })
+      .expect(404);
+    expect(otherGymVoid.body.code).toBe(ErrorCode.PAYMENT_NOT_FOUND);
+
+    const deskVoid = await request(app.getHttpServer())
+      .post(`/api/v1/payments/${remainder.body.id}/void`)
+      .set('Authorization', `Bearer ${deskLogin.body.accessToken}`)
+      .send({ reason: 'I typed it wrong' })
+      .expect(403);
+    expect(deskVoid.body.code).toBe(ErrorCode.FORBIDDEN);
+
+    const repay = await request(app.getHttpServer())
+      .post('/api/v1/payments')
+      .set('Authorization', `Bearer ${tokenA}`)
+      .send({
+        subscriptionId: paid.body.id,
+        branchId: branchA,
+        method: 'CASH',
+        amount: 500,
+      })
+      .expect(201);
+    expect(repay.body.dueAmount).toBe(0);
 
     await prisma.withTenant(tenantA, (tx) =>
       tx.subscription.update({

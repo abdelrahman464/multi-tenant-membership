@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { Prisma, SubscriptionStatus } from '@prisma/client';
+import { Prisma, SubscriptionStatus, PaymentStatus } from '@prisma/client';
 import { PrismaService } from '../../../database/prisma.service';
 import {
   zonedYmd,
@@ -90,7 +90,11 @@ export class DashboardRepository {
         }),
         tx.payment.groupBy({
           by: ['method'],
-          where: { tenantId, paidAt: inRange },
+          where: {
+            tenantId,
+            paidAt: inRange,
+            status: PaymentStatus.COLLECTED,
+          },
           _sum: { amount: true },
           _count: { _all: true },
         }),
@@ -170,6 +174,7 @@ export class DashboardRepository {
       where: {
         tenantId,
         subscriptionId: { in: billed.map((row) => row.id) },
+        status: PaymentStatus.COLLECTED,
       },
       _sum: { amount: true },
     });

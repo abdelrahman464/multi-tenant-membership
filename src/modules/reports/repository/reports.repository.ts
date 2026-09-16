@@ -1,5 +1,5 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, PaymentStatus } from '@prisma/client';
 import { ErrorCode } from '../../../common/constants/error-codes';
 import { AppHttpException } from '../../../common/errors/app-http.exception';
 import { PrismaService } from '../../../database/prisma.service';
@@ -88,6 +88,7 @@ export class ReportsRepository {
           : {}),
         ...(query.branchId ? { branchId: query.branchId } : {}),
         ...(query.method ? { method: query.method } : {}),
+        ...(query.status ? { status: query.status } : {}),
         ...(query.planId ? { subscription: { planId: query.planId } } : {}),
       };
       await this.assertRowBudget(tx.payment.count({ where }));
@@ -234,7 +235,11 @@ export class ReportsRepository {
     }
     const grouped = await tx.payment.groupBy({
       by: ['subscriptionId'],
-      where: { tenantId, subscriptionId: { in: unique } },
+      where: {
+        tenantId,
+        subscriptionId: { in: unique },
+        status: PaymentStatus.COLLECTED,
+      },
       _sum: { amount: true },
     });
     for (const row of grouped) {

@@ -15,6 +15,7 @@ export const MEMBER_CSV_HEADERS = [
 export const PAYMENT_CSV_HEADERS = [
   'paidAt',
   'method',
+  'status',
   'amount',
   'currency',
   'notes',

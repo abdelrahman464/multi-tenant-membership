@@ -8,10 +8,13 @@ export type PaymentWithRelations = Prisma.PaymentGetPayload<{
 export type PublicPayment = {
   id: string;
   method: PaymentWithRelations['method'];
+  status: PaymentWithRelations['status'];
   amount: number;
   currency: string;
   notes: string | null;
+  voidReason: string | null;
   paidAt: Date;
+  voidedAt: Date | null;
   price: number;
   paidTotal: number;
   dueAmount: number;
@@ -39,10 +42,13 @@ export function toPublicPayment(
   return {
     id: row.id,
     method: row.method,
+    status: row.status,
     amount: Number(row.amount),
     currency: row.currency,
     notes: row.notes,
+    voidReason: row.voidReason,
     paidAt: row.paidAt,
+    voidedAt: row.voidedAt,
     price,
     paidTotal: extras.paidTotal,
     dueAmount: roundMoney(Math.max(0, price - extras.paidTotal)),
