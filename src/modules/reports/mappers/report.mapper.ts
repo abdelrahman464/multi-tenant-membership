@@ -93,6 +93,7 @@ export function subscriptionCsvRow(
     startsAt: Date;
     endsAt: Date;
     expiredAt: Date | null;
+    cancelledAt: Date | null;
     createdAt: Date;
     member: { name: string; phone: string; status: string };
     staff: { name: string } | null;
@@ -120,6 +121,7 @@ export function subscriptionCsvRow(
     row.startsAt,
     row.endsAt,
     row.expiredAt,
+    row.cancelledAt,
     row.createdAt,
   ];
 }

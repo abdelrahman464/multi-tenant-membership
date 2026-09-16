@@ -142,6 +142,9 @@ export class ReportsRepository {
         ...(query.memberId ? { memberId: query.memberId } : {}),
         ...(query.planId ? { planId: query.planId } : {}),
         ...(query.soldByStaffId ? { soldByStaffId: query.soldByStaffId } : {}),
+        ...(query.cancelledByStaffId
+          ? { cancelledByStaffId: query.cancelledByStaffId }
+          : {}),
         ...(query.status ? { status: query.status } : {}),
       };
       const deskIds = await this.subscriptionsRepository.deskListIds(
@@ -179,6 +182,7 @@ export class ReportsRepository {
           startsAt: true,
           endsAt: true,
           expiredAt: true,
+          cancelledAt: true,
           createdAt: true,
           member: {
             select: { name: true, phone: true, status: true },

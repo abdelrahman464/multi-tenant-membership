@@ -296,6 +296,140 @@ describe('Subscriptions (e2e)', () => {
       .expect(404);
 
     await request(app.getHttpServer())
+      .post('/api/v1/staff')
+      .set('Authorization', `Bearer ${tokenA}`)
+      .send({
+        name: 'Desk Staff',
+        email: `desk-${suffix}@example.com`,
+        password: 'DeskPass1!',
+        role: 'BRANCH_STAFF',
+        branchId: branchA,
+      })
+      .expect(201);
+
+    const deskLogin = await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .send({
+        slug: slugA,
+        email: `desk-${suffix}@example.com`,
+        password: 'DeskPass1!',
+      })
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .post(`/api/v1/subscriptions/${selectedSub.body.id}/cancel`)
+      .set('Authorization', `Bearer ${deskLogin.body.accessToken}`)
+      .send({ reason: 'Member asked to stop' })
+      .expect(403);
+
+    await request(app.getHttpServer())
+      .post(`/api/v1/subscriptions/${selectedSub.body.id}/cancel`)
+      .set('Authorization', `Bearer ${loginB.body.accessToken}`)
+      .send({ reason: 'Member asked to stop' })
+      .expect(404);
+
+    const cancelled = await request(app.getHttpServer())
+      .post(`/api/v1/subscriptions/${packSub.body.id}/cancel`)
+      .set('Authorization', `Bearer ${tokenA}`)
+      .send({ reason: 'Sold the wrong pack' })
+      .expect(200);
+    expect(cancelled.body.status).toBe('CANCELLED');
+    expect(cancelled.body.cancelReason).toBe('Sold the wrong pack');
+    expect(cancelled.body.cancelledAt).toEqual(expect.any(String));
+    expect(cancelled.body.cancelledBy).toEqual(
+      expect.objectContaining({
+        id: loginA.body.staff.id,
+        name: 'Owner A',
+        role: 'TENANT_OWNER',
+      }),
+    );
+    expect(cancelled.body.staff.id).toBe(loginA.body.staff.id);
+
+    const cancelledList = await request(app.getHttpServer())
+      .get('/api/v1/subscriptions?status=CANCELLED')
+      .set('Authorization', `Bearer ${tokenA}`)
+      .expect(200);
+    expect(cancelledList.body.total).toBe(1);
+    expect(cancelledList.body.data[0].id).toBe(packSub.body.id);
+
+    const cancelledByOwner = await request(app.getHttpServer())
+      .get(`/api/v1/subscriptions?cancelledByStaffId=${loginA.body.staff.id}`)
+      .set('Authorization', `Bearer ${tokenA}`)
+      .expect(200);
+    expect(cancelledByOwner.body.total).toBe(1);
+    expect(cancelledByOwner.body.data[0].id).toBe(packSub.body.id);
+
+    const payCancelled = await request(app.getHttpServer())
+      .post('/api/v1/payments')
+      .set('Authorization', `Bearer ${tokenA}`)
+      .send({
+        subscriptionId: packSub.body.id,
+        branchId: branchA,
+        method: 'CASH',
+      })
+      .expect(400);
+    expect(payCancelled.body.code).toBe(ErrorCode.SUBSCRIPTION_NOT_ACTIVE);
+
+    const checkInCancelled = await request(app.getHttpServer())
+      .post('/api/v1/checkIns')
+      .set('Authorization', `Bearer ${tokenA}`)
+      .send({
+        memberId: member.body.id,
+        branchId: branchA,
+        subscriptionId: packSub.body.id,
+      })
+      .expect(400);
+    expect(checkInCancelled.body.code).toBe(ErrorCode.SUBSCRIPTION_NOT_ACTIVE);
+
+    const alreadyCancelled = await request(app.getHttpServer())
+      .post(`/api/v1/subscriptions/${packSub.body.id}/cancel`)
+      .set('Authorization', `Bearer ${tokenA}`)
+      .send({ reason: 'Sold the wrong pack' })
+      .expect(400);
+    expect(alreadyCancelled.body.code).toBe(
+      ErrorCode.SUBSCRIPTION_ALREADY_CANCELLED,
+    );
+
+    const cancelExpired = await request(app.getHttpServer())
+      .post(`/api/v1/subscriptions/${timeSub.body.id}/cancel`)
+      .set('Authorization', `Bearer ${tokenA}`)
+      .send({ reason: 'Member quit' })
+      .expect(400);
+    expect(cancelExpired.body.code).toBe(ErrorCode.SUBSCRIPTION_NOT_ACTIVE);
+
+    await request(app.getHttpServer())
+      .patch('/api/v1/settings')
+      .set('Authorization', `Bearer ${tokenA}`)
+      .send({
+        freezeEnabled: true,
+        maxFreezeDays: 14,
+        maxFreezeDaysPerYear: 20,
+      })
+      .expect(200);
+
+    const frozen = await request(app.getHttpServer())
+      .post(`/api/v1/subscriptions/${selectedSub.body.id}/freeze`)
+      .set('Authorization', `Bearer ${tokenA}`)
+      .send({ days: 7 })
+      .expect(201);
+    expect(frozen.body.status).toBe('FROZEN');
+
+    const cancelFrozen = await request(app.getHttpServer())
+      .post(`/api/v1/subscriptions/${selectedSub.body.id}/cancel`)
+      .set('Authorization', `Bearer ${tokenA}`)
+      .send({ reason: 'Injury, stopping the plan' })
+      .expect(200);
+    expect(cancelFrozen.body.status).toBe('CANCELLED');
+    expect(cancelFrozen.body.frozenAt).toBeNull();
+    expect(cancelFrozen.body.freezeEndsAt).toBeNull();
+
+    const stillGoingAfterCancel = await request(app.getHttpServer())
+      .get('/api/v1/subscriptions?inProgress=true')
+      .set('Authorization', `Bearer ${tokenA}`)
+      .expect(200);
+    expect(stillGoingAfterCancel.body.total).toBe(0);
+
+    await request(app.getHttpServer())
       .patch(`/api/v1/plans/${monthly.body.id}`)
       .set('Authorization', `Bearer ${tokenA}`)
       .send({ status: 'ARCHIVED' })

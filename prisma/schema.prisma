@@ -105,6 +105,7 @@ model Staff {
   payments       Payment[] @relation("PaymentCollectedBy")
   voidedPayments Payment[] @relation("PaymentVoidedBy")
   soldSubscriptions Subscription[] @relation("SubscriptionSoldBy")
+  cancelledSubscriptions Subscription[] @relation("SubscriptionCancelledBy")
   auditEvents    AuditEvent[]
 
   @@unique([tenantId, email])
@@ -223,6 +224,10 @@ model Subscription {
   frozenAt          DateTime?          @map("frozen_at")
   freezeEndsAt      DateTime?          @map("freeze_ends_at")
   expiredAt         DateTime?          @map("expired_at")
+  cancelledByStaffId String?           @map("cancelled_by_staff_id") @db.Uuid
+  cancelledBy        Staff?            @relation("SubscriptionCancelledBy", fields: [cancelledByStaffId], references: [id], onDelete: Restrict)
+  cancelledAt        DateTime?         @map("cancelled_at")
+  cancelReason       String?           @map("cancel_reason")
   /// Set on the first grace check-in. This sold plan never gets a second window.
   graceUsedAt       DateTime?          @map("grace_used_at")
   /// accessUntil at the moment grace was used. Later settings changes do not move it.
@@ -240,6 +245,7 @@ model Subscription {
   @@index([memberId])
   @@index([planId])
   @@index([soldByStaffId])
+  @@index([cancelledByStaffId])
   @@index([tenantId, status, endsAt])
   @@map("subscriptions")
 }
@@ -372,6 +378,7 @@ enum AuditAction {
   SUBSCRIPTION_FROZEN
   SUBSCRIPTION_UNFROZEN
   SUBSCRIPTION_RENEWED
+  SUBSCRIPTION_CANCELLED
   CHECK_IN_CREATED
   PAYMENT_CREATED
   PAYMENT_VOIDED

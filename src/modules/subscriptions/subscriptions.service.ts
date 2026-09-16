@@ -3,6 +3,7 @@ import { ErrorCode } from '../../common/constants/error-codes';
 import { AppHttpException } from '../../common/errors/app-http.exception';
 import { AuthenticatedUser } from '../../common/types/authenticated-user.type';
 import { CreateSubscriptionDto } from './dto/create-subscription.dto';
+import { CancelSubscriptionDto } from './dto/cancel-subscription.dto';
 import { FreezeSubscriptionDto } from './dto/freeze-subscription.dto';
 import { ListSubscriptionsQueryDto } from './dto/list-subscriptions-query.dto';
 import { SubscriptionsRepository } from './repository/subscriptions.repository';
@@ -76,6 +77,26 @@ export class SubscriptionsService {
 
   async renew(actor: AuthenticatedUser, id: string) {
     const subscription = await this.subscriptionsRepository.renew(actor, id);
+    if (!subscription) {
+      throw new AppHttpException(
+        HttpStatus.NOT_FOUND,
+        ErrorCode.SUBSCRIPTION_NOT_FOUND,
+        'Subscription not found',
+      );
+    }
+    return subscription;
+  }
+
+  async cancel(
+    actor: AuthenticatedUser,
+    id: string,
+    dto: CancelSubscriptionDto,
+  ) {
+    const subscription = await this.subscriptionsRepository.cancel(
+      actor,
+      id,
+      dto.reason,
+    );
     if (!subscription) {
       throw new AppHttpException(
         HttpStatus.NOT_FOUND,

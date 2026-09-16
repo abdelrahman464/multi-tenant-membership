@@ -10,9 +10,12 @@ import {
 } from '@nestjs/common';
 import { GetAuthUser } from '../../common/decorators/get-auth-user.decorator';
 import { Audit } from '../../common/decorators/audit.decorator';
+import { Roles } from '../../common/decorators/roles.decorator';
 import { ParseUuidPipe } from '../../common/pipes/parse-uuid.pipe';
 import { AuthenticatedUser } from '../../common/types/authenticated-user.type';
+import { StaffRole } from '../staff/enums/staff-role.enum';
 import { AuditAction } from '../audit/enums/audit-action.enum';
+import { CancelSubscriptionDto } from './dto/cancel-subscription.dto';
 import { CreateSubscriptionDto } from './dto/create-subscription.dto';
 import { FreezeSubscriptionDto } from './dto/freeze-subscription.dto';
 import { ListSubscriptionsQueryDto } from './dto/list-subscriptions-query.dto';
@@ -78,6 +81,21 @@ export class SubscriptionsController {
     @Param('id', ParseUuidPipe) id: string,
   ) {
     return this.subscriptionsService.renew(actor, id);
+  }
+
+  @Post(':id/cancel')
+  @HttpCode(HttpStatus.OK)
+  @Roles(StaffRole.TENANT_OWNER, StaffRole.ADMIN)
+  @Audit({
+    action: AuditAction.SUBSCRIPTION_CANCELLED,
+    entityType: 'subscription',
+  })
+  cancel(
+    @GetAuthUser() actor: AuthenticatedUser,
+    @Param('id', ParseUuidPipe) id: string,
+    @Body() dto: CancelSubscriptionDto,
+  ) {
+    return this.subscriptionsService.cancel(actor, id, dto);
   }
 
   @Get(':id')

@@ -57,5 +57,6 @@ export const SUBSCRIPTION_CSV_HEADERS = [
   'startsAt',
   'endsAt',
   'expiredAt',
+  'cancelledAt',
   'createdAt',
 ] as const;

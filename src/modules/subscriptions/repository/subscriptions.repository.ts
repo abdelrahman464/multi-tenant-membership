@@ -334,6 +334,61 @@ export class SubscriptionsRepository {
     });
   }
 
+  cancel(actor: AuthenticatedUser, id: string, reason: string) {
+    return this.prisma.withTenant(actor.tenantId, async (tx) => {
+      const now = new Date();
+      await this.settleSubscriptionState(tx, actor.tenantId, id);
+
+      const subscription = await tx.subscription.findFirst({
+        where: { id, tenantId: actor.tenantId },
+      });
+      if (!subscription) {
+        return null;
+      }
+      if (subscription.status === SubscriptionStatus.CANCELLED) {
+        throw new AppHttpException(
+          HttpStatus.BAD_REQUEST,
+          ErrorCode.SUBSCRIPTION_ALREADY_CANCELLED,
+          'This subscription is already cancelled',
+        );
+      }
+      if (
+        subscription.status !== SubscriptionStatus.ACTIVE &&
+        subscription.status !== SubscriptionStatus.FROZEN &&
+        subscription.status !== SubscriptionStatus.IN_GRACE
+      ) {
+        throw new AppHttpException(
+          HttpStatus.BAD_REQUEST,
+          ErrorCode.SUBSCRIPTION_NOT_ACTIVE,
+          'Only a live subscription can be cancelled',
+        );
+      }
+
+      await tx.subscriptionFreeze.updateMany({
+        where: {
+          tenantId: actor.tenantId,
+          subscriptionId: id,
+          unfrozenAt: null,
+        },
+        data: { unfrozenAt: now },
+      });
+
+      const row = await tx.subscription.update({
+        where: { id },
+        data: {
+          status: SubscriptionStatus.CANCELLED,
+          cancelledAt: now,
+          cancelledByStaffId: actor.id,
+          cancelReason: reason.trim(),
+          frozenAt: null,
+          freezeEndsAt: null,
+        },
+        include: SUBSCRIPTION_INCLUDE,
+      });
+      return this.toPublicRow(tx, actor.tenantId, row, now);
+    });
+  }
+
   private async insertSoldPlan(
     tx: Prisma.TransactionClient,
     tenantId: string,
@@ -537,6 +592,7 @@ export class SubscriptionsRepository {
         unfrozenAt: null,
         endedAt: { lte: now },
         ...(subscriptionId ? { subscriptionId } : {}),
+        subscription: { status: { not: SubscriptionStatus.CANCELLED } },
       },
     });
     for (const freeze of overdue) {

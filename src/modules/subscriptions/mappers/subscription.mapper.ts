@@ -27,6 +27,8 @@ export type PublicSubscription = {
   frozenAt: Date | null;
   freezeEndsAt: Date | null;
   expiredAt: Date | null;
+  cancelledAt: Date | null;
+  cancelReason: string | null;
   graceUsedAt: Date | null;
   graceEndsAt: Date | null;
   accessUntil: Date;
@@ -35,6 +37,7 @@ export type PublicSubscription = {
   createdAt: Date;
   member: SubscriptionRow['member'];
   staff: SubscriptionRow['staff'];
+  cancelledBy: SubscriptionRow['cancelledBy'];
   plan: {
     id: string;
     name: string;
@@ -78,6 +81,8 @@ export function toPublicSubscription(
     frozenAt: row.frozenAt,
     freezeEndsAt: row.freezeEndsAt,
     expiredAt: row.expiredAt,
+    cancelledAt: row.cancelledAt,
+    cancelReason: row.cancelReason,
     graceUsedAt: row.graceUsedAt,
     graceEndsAt: row.graceEndsAt,
     accessUntil,
@@ -86,6 +91,7 @@ export function toPublicSubscription(
     createdAt: row.createdAt,
     member: row.member,
     staff: row.staff,
+    cancelledBy: row.cancelledBy,
     plan: {
       id: row.plan.id,
       name: row.plan.name,

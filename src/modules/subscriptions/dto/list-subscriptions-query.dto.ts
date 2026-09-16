@@ -31,6 +31,10 @@ export class ListSubscriptionsQueryDto {
   soldByStaffId?: string;
 
   @IsOptional()
+  @IsUUID()
+  cancelledByStaffId?: string;
+
+  @IsOptional()
   @IsEnum(SubscriptionStatus)
   status?: SubscriptionStatus;
 
