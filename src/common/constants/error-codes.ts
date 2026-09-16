@@ -55,6 +55,8 @@ export const ErrorCode = {
   PAYMENT_EXCEEDS_DUE: 'PAYMENT_EXCEEDS_DUE',
   PAYMENT_NOT_DUE: 'PAYMENT_NOT_DUE',
   DATE_RANGE_INVALID: 'DATE_RANGE_INVALID',
+  EXPORT_TOO_LARGE: 'EXPORT_TOO_LARGE',
+  RATE_LIMITED: 'RATE_LIMITED',
 } as const;
 
 export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode];

@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Redis from 'ioredis';
+import { INCR_WINDOW_LUA } from '../common/constants/rate-limit.constants';
 
 @Injectable()
 export class RedisService implements OnModuleInit, OnModuleDestroy {
@@ -56,5 +57,23 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     } catch {
       return false;
     }
+  }
+
+  async incrWindow(
+    key: string,
+    windowSec: number,
+  ): Promise<{ count: number; ttlSec: number }> {
+    const result = (await this.client.eval(
+      INCR_WINDOW_LUA,
+      1,
+      key,
+      String(windowSec),
+    )) as [number, number];
+    const count = Number(result[0]);
+    const ttl = Number(result[1]);
+    return {
+      count,
+      ttlSec: ttl > 0 ? ttl : windowSec,
+    };
   }
 }

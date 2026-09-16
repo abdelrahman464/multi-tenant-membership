@@ -10,8 +10,10 @@ import {
   Query,
 } from '@nestjs/common';
 import { GetAuthUser } from '../../common/decorators/get-auth-user.decorator';
+import { Audit } from '../../common/decorators/audit.decorator';
 import { ParseUuidPipe } from '../../common/pipes/parse-uuid.pipe';
 import { AuthenticatedUser } from '../../common/types/authenticated-user.type';
+import { AuditAction } from '../audit/enums/audit-action.enum';
 import { CreateMemberDto } from './dto/create-member.dto';
 import { ListMembersQueryDto } from './dto/list-members-query.dto';
 import { UpdateMemberDto } from './dto/update-member.dto';
@@ -31,6 +33,7 @@ export class MembersController {
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
+  @Audit({ action: AuditAction.MEMBER_CREATED, entityType: 'member' })
   create(
     @GetAuthUser() actor: AuthenticatedUser,
     @Body() dto: CreateMemberDto,
@@ -47,6 +50,7 @@ export class MembersController {
   }
 
   @Patch(':id')
+  @Audit({ action: AuditAction.MEMBER_UPDATED, entityType: 'member' })
   update(
     @GetAuthUser() actor: AuthenticatedUser,
     @Param('id', ParseUuidPipe) id: string,

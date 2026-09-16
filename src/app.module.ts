@@ -8,12 +8,15 @@ import jwtConfig from './config/jwt.config';
 import redisConfig from './config/redis.config';
 import { buildLoggerParams } from './config/logger.config';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
+import { RateLimitGuard } from './common/guards/rate-limit.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { PrismaModule } from './database/prisma.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { CheckInsModule } from './modules/check-ins/check-ins.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { HealthModule } from './modules/health/health.module';
+import { ReportsModule } from './modules/reports/reports.module';
+import { AuditModule } from './modules/audit/audit.module';
 import { MembersModule } from './modules/members/members.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { PaymentsModule } from './modules/payments/payments.module';
@@ -46,9 +49,12 @@ import { RedisModule } from './redis/redis.module';
     CheckInsModule,
     PaymentsModule,
     DashboardModule,
+    ReportsModule,
+    AuditModule,
     AuthModule,
   ],
   providers: [
+    { provide: APP_GUARD, useClass: RateLimitGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
   ],

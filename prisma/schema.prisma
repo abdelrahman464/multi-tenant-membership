@@ -44,6 +44,7 @@ model Tenant {
   notifications  Notification[]
   checkIns       CheckIn[]
   payments       Payment[]
+  auditEvents    AuditEvent[]
 
   @@map("tenants")
 }
@@ -102,6 +103,7 @@ model Staff {
   updatedAt      DateTime  @updatedAt @map("updated_at")
   checkIns       CheckIn[]
   payments       Payment[]
+  auditEvents    AuditEvent[]
 
   @@unique([tenantId, email])
   @@index([tenantId])
@@ -135,6 +137,8 @@ model Member {
   @@unique([tenantId, phone])
   @@index([tenantId])
   @@index([homeBranchId])
+  @@index([tenantId, status])
+  @@index([tenantId, createdAt])
   @@map("members")
 }
 
@@ -231,6 +235,7 @@ model Subscription {
   @@index([tenantId])
   @@index([memberId])
   @@index([planId])
+  @@index([tenantId, status, endsAt])
   @@map("subscriptions")
 }
 
@@ -278,6 +283,7 @@ model Notification {
   @@index([tenantId])
   @@index([memberId])
   @@index([subscriptionId])
+  @@index([tenantId, readAt])
   @@map("notifications")
 }
 
@@ -300,6 +306,7 @@ model CheckIn {
   @@index([memberId])
   @@index([subscriptionId, checkedInAt])
   @@index([branchId])
+  @@index([tenantId, checkedInAt])
   @@map("check_ins")
 }
 
@@ -332,5 +339,45 @@ model Payment {
   @@index([memberId])
   @@index([subscriptionId])
   @@index([branchId])
+  @@index([tenantId, paidAt])
   @@map("payments")
+}
+
+enum AuditAction {
+  LOGIN
+  PASSWORD_CHANGED
+  MEMBER_CREATED
+  MEMBER_UPDATED
+  PLAN_CREATED
+  PLAN_UPDATED
+  STAFF_CREATED
+  SUBSCRIPTION_CREATED
+  SUBSCRIPTION_FROZEN
+  SUBSCRIPTION_UNFROZEN
+  SUBSCRIPTION_RENEWED
+  CHECK_IN_CREATED
+  PAYMENT_CREATED
+  SETTINGS_UPDATED
+  REPORT_EXPORTED
+}
+
+/// Who did what at the gym. Writes only (plus CSV export). No passwords or tokens.
+model AuditEvent {
+  id         String      @id @default(uuid()) @db.Uuid
+  tenantId   String      @map("tenant_id") @db.Uuid
+  tenant     Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  staffId    String?     @map("staff_id") @db.Uuid
+  staff      Staff?      @relation(fields: [staffId], references: [id], onDelete: SetNull)
+  action     AuditAction
+  entityType String?     @map("entity_type")
+  entityId   String?     @map("entity_id") @db.Uuid
+  metadata   Json?
+  ip         String?
+  userAgent  String?     @map("user_agent")
+  createdAt  DateTime    @default(now()) @map("created_at")
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, action])
+  @@index([staffId])
+  @@map("audit_events")
 }

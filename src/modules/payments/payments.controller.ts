@@ -9,8 +9,10 @@ import {
   Query,
 } from '@nestjs/common';
 import { GetAuthUser } from '../../common/decorators/get-auth-user.decorator';
+import { Audit } from '../../common/decorators/audit.decorator';
 import { ParseUuidPipe } from '../../common/pipes/parse-uuid.pipe';
 import { AuthenticatedUser } from '../../common/types/authenticated-user.type';
+import { AuditAction } from '../audit/enums/audit-action.enum';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { ListPaymentsQueryDto } from './dto/list-payments-query.dto';
 import { PaymentsService } from './payments.service';
@@ -29,6 +31,7 @@ export class PaymentsController {
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
+  @Audit({ action: AuditAction.PAYMENT_CREATED, entityType: 'payment' })
   create(
     @GetAuthUser() actor: AuthenticatedUser,
     @Body() dto: CreatePaymentDto,

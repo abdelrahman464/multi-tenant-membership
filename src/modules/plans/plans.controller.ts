@@ -11,8 +11,10 @@ import {
 } from '@nestjs/common';
 import { GetAuthUser } from '../../common/decorators/get-auth-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { Audit } from '../../common/decorators/audit.decorator';
 import { ParseUuidPipe } from '../../common/pipes/parse-uuid.pipe';
 import { AuthenticatedUser } from '../../common/types/authenticated-user.type';
+import { AuditAction } from '../audit/enums/audit-action.enum';
 import { StaffRole } from '../staff/enums/staff-role.enum';
 import { CreatePlanDto } from './dto/create-plan.dto';
 import { ListPlansQueryDto } from './dto/list-plans-query.dto';
@@ -34,6 +36,7 @@ export class PlansController {
   @Post()
   @HttpCode(HttpStatus.CREATED)
   @Roles(StaffRole.TENANT_OWNER, StaffRole.ADMIN)
+  @Audit({ action: AuditAction.PLAN_CREATED, entityType: 'plan' })
   create(@GetAuthUser() actor: AuthenticatedUser, @Body() dto: CreatePlanDto) {
     return this.plansService.create(actor, dto);
   }
@@ -48,6 +51,7 @@ export class PlansController {
 
   @Patch(':id')
   @Roles(StaffRole.TENANT_OWNER, StaffRole.ADMIN)
+  @Audit({ action: AuditAction.PLAN_UPDATED, entityType: 'plan' })
   update(
     @GetAuthUser() actor: AuthenticatedUser,
     @Param('id', ParseUuidPipe) id: string,

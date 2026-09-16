@@ -1,7 +1,9 @@
 import { Body, Controller, Get, Patch } from '@nestjs/common';
 import { GetAuthUser } from '../../common/decorators/get-auth-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { Audit } from '../../common/decorators/audit.decorator';
 import { AuthenticatedUser } from '../../common/types/authenticated-user.type';
+import { AuditAction } from '../audit/enums/audit-action.enum';
 import { StaffRole } from '../staff/enums/staff-role.enum';
 import { UpdateTenantSettingsDto } from './dto/update-tenant-settings.dto';
 import { TenantsService } from './tenants.service';
@@ -18,6 +20,7 @@ export class TenantSettingsController {
 
   @Patch()
   @Roles(StaffRole.TENANT_OWNER, StaffRole.ADMIN)
+  @Audit({ action: AuditAction.SETTINGS_UPDATED, entityType: 'settings' })
   updateMine(
     @GetAuthUser() actor: AuthenticatedUser,
     @Body() dto: UpdateTenantSettingsDto,

@@ -12,8 +12,10 @@ import {
 import { Request, Response } from 'express';
 import { GetAuthUser } from '../../common/decorators/get-auth-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
+import { Audit } from '../../common/decorators/audit.decorator';
 import { ParseUuidPipe } from '../../common/pipes/parse-uuid.pipe';
 import { AuthenticatedUser } from '../../common/types/authenticated-user.type';
+import { AuditAction } from '../audit/enums/audit-action.enum';
 import { AuthService } from './auth.service';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { LoginDto } from './dto/login.dto';
@@ -24,6 +26,7 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Public()
+  @Audit({ action: AuditAction.LOGIN })
   @Post('login')
   login(
     @Body() dto: LoginDto,
@@ -77,6 +80,7 @@ export class AuthController {
     return this.authService.revokeSessionById(req, res, actor.id, sid);
   }
 
+  @Audit({ action: AuditAction.PASSWORD_CHANGED })
   @Patch('changePassword')
   changePassword(
     @GetAuthUser() actor: AuthenticatedUser,
