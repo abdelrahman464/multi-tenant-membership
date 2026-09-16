@@ -63,18 +63,24 @@ export class PaymentsRepository {
 
   findById(tenantId: string, id: string) {
     return this.prisma.withTenant(tenantId, async (tx) => {
-      const row = await tx.payment.findFirst({
-        where: { id, tenantId },
-        include: PAYMENT_INCLUDE,
-      });
+      const row = await this.loadPayment(tx, tenantId, id);
       if (!row) {
         return null;
       }
-      const paidTotal =
-        (await this.paidTotals(tx, tenantId, [row.subscriptionId])).get(
-          row.subscriptionId,
-        ) ?? 0;
-      return toPublicPayment(row, { paidTotal });
+      return toPublicPayment(row, { paidTotal: row.paidTotal });
+    });
+  }
+
+  findReceiptById(tenantId: string, id: string) {
+    return this.prisma.withTenant(tenantId, async (tx) => {
+      const row = await this.loadPayment(tx, tenantId, id);
+      if (!row) {
+        return null;
+      }
+      return {
+        payment: toPublicPayment(row, { paidTotal: row.paidTotal }),
+        gym: row.tenant,
+      };
     });
   }
 
@@ -181,6 +187,28 @@ export class PaymentsRepository {
         paidTotal: roundMoney(paidSoFar + amount),
       });
     });
+  }
+
+  private async loadPayment(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    id: string,
+  ) {
+    const row = await tx.payment.findFirst({
+      where: { id, tenantId },
+      include: {
+        ...PAYMENT_INCLUDE,
+        tenant: { select: { name: true, timezone: true } },
+      },
+    });
+    if (!row) {
+      return null;
+    }
+    const paidTotal =
+      (await this.paidTotals(tx, tenantId, [row.subscriptionId])).get(
+        row.subscriptionId,
+      ) ?? 0;
+    return { ...row, paidTotal };
   }
 
   private async paidTotals(

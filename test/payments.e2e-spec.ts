@@ -269,11 +269,38 @@ describe('Payments (e2e)', () => {
     expect(fetched.body.id).toBe(first.body.id);
     expect(fetched.body.paidTotal).toBe(1500);
 
+    const receipt = await request(app.getHttpServer())
+      .get(`/api/v1/payments/${first.body.id}/receipt`)
+      .set('Authorization', `Bearer ${tokenA}`)
+      .buffer(true)
+      .parse((res, fn) => {
+        const chunks: Buffer[] = [];
+        res.on('data', (chunk: Buffer) => chunks.push(chunk));
+        res.on('end', () => fn(null, Buffer.concat(chunks)));
+      })
+      .expect(200);
+    expect(receipt.headers['content-type']).toMatch(/application\/pdf/);
+    expect(receipt.headers['content-disposition']).toMatch(
+      /attachment; filename="receipt-Ahmed-Hassan-\d{4}-\d{2}-\d{2}\.pdf"/,
+    );
+    const receiptText = Buffer.isBuffer(receipt.body)
+      ? receipt.body.toString('latin1')
+      : String(receipt.body);
+    expect(receiptText.startsWith('%PDF-')).toBe(true);
+    expect(receiptText).toContain('Cairo-Regular');
+
     const missing = await request(app.getHttpServer())
       .get(`/api/v1/payments/${first.body.id}`)
       .set('Authorization', `Bearer ${tokenB}`)
       .expect(404);
     expect(missing.body.code).toBe(ErrorCode.PAYMENT_NOT_FOUND);
+
+    const missingReceipt = await request(app.getHttpServer())
+      .get(`/api/v1/payments/${first.body.id}/receipt`)
+      .set('Authorization', `Bearer ${tokenB}`)
+      .expect(404);
+    expect(missingReceipt.body.code).toBe(ErrorCode.PAYMENT_NOT_FOUND);
+    expect(missingReceipt.headers['content-type']).not.toMatch(/pdf/);
 
     const otherSub = await request(app.getHttpServer())
       .post('/api/v1/subscriptions')
