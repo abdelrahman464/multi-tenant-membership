@@ -33,7 +33,7 @@ export class SubscriptionsService {
   }
 
   create(actor: AuthenticatedUser, dto: CreateSubscriptionDto) {
-    return this.subscriptionsRepository.create(actor.tenantId, {
+    return this.subscriptionsRepository.create(actor, {
       memberId: dto.memberId,
       planId: dto.planId,
     });
@@ -75,10 +75,7 @@ export class SubscriptionsService {
   }
 
   async renew(actor: AuthenticatedUser, id: string) {
-    const subscription = await this.subscriptionsRepository.renew(
-      actor.tenantId,
-      id,
-    );
+    const subscription = await this.subscriptionsRepository.renew(actor, id);
     if (!subscription) {
       throw new AppHttpException(
         HttpStatus.NOT_FOUND,

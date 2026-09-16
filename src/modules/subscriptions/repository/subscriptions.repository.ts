@@ -3,6 +3,7 @@ import { HttpStatus, Injectable } from '@nestjs/common';
 import { Prisma, SubscriptionStatus, PaymentStatus } from '@prisma/client';
 import { ErrorCode } from '../../../common/constants/error-codes';
 import { AppHttpException } from '../../../common/errors/app-http.exception';
+import { AuthenticatedUser } from '../../../common/types/authenticated-user.type';
 import { ApiFeatures } from '../../../common/utils/api-features.utils';
 import { PrismaService } from '../../../database/prisma.service';
 import {
@@ -72,10 +73,10 @@ export class SubscriptionsRepository {
     });
   }
 
-  create(tenantId: string, data: CreateSubscriptionDto) {
-    return this.prisma.withTenant(tenantId, async (tx) => {
+  create(actor: AuthenticatedUser, data: CreateSubscriptionDto) {
+    return this.prisma.withTenant(actor.tenantId, async (tx) => {
       const member = await tx.member.findFirst({
-        where: { id: data.memberId, tenantId },
+        where: { id: data.memberId, tenantId: actor.tenantId },
         select: { id: true, status: true },
       });
       if (!member) {
@@ -94,7 +95,7 @@ export class SubscriptionsRepository {
       }
 
       const plan = await tx.plan.findFirst({
-        where: { id: data.planId, tenantId },
+        where: { id: data.planId, tenantId: actor.tenantId },
       });
       if (!plan) {
         throw new AppHttpException(
@@ -111,7 +112,7 @@ export class SubscriptionsRepository {
         );
       }
 
-      return this.insertSoldPlan(tx, tenantId, member.id, plan);
+      return this.insertSoldPlan(tx, actor.tenantId, member.id, plan, actor.id);
     });
   }
 
@@ -259,13 +260,13 @@ export class SubscriptionsRepository {
     });
   }
 
-  renew(tenantId: string, id: string) {
-    return this.prisma.withTenant(tenantId, async (tx) => {
+  renew(actor: AuthenticatedUser, id: string) {
+    return this.prisma.withTenant(actor.tenantId, async (tx) => {
       const now = new Date();
-      await this.settleSubscriptionState(tx, tenantId, id);
+      await this.settleSubscriptionState(tx, actor.tenantId, id);
 
       const subscription = await tx.subscription.findFirst({
-        where: { id, tenantId },
+        where: { id, tenantId: actor.tenantId },
       });
       if (!subscription) {
         return null;
@@ -293,7 +294,7 @@ export class SubscriptionsRepository {
       }
 
       const member = await tx.member.findFirst({
-        where: { id: subscription.memberId, tenantId },
+        where: { id: subscription.memberId, tenantId: actor.tenantId },
         select: { id: true, status: true },
       });
       if (!member || member.status === 'ARCHIVED') {
@@ -305,7 +306,7 @@ export class SubscriptionsRepository {
       }
 
       const plan = await tx.plan.findFirst({
-        where: { id: subscription.planId, tenantId },
+        where: { id: subscription.planId, tenantId: actor.tenantId },
       });
       if (!plan) {
         throw new AppHttpException(
@@ -322,7 +323,14 @@ export class SubscriptionsRepository {
         );
       }
 
-      return this.insertSoldPlan(tx, tenantId, member.id, plan, now);
+      return this.insertSoldPlan(
+        tx,
+        actor.tenantId,
+        member.id,
+        plan,
+        actor.id,
+        now,
+      );
     });
   }
 
@@ -339,6 +347,7 @@ export class SubscriptionsRepository {
       price: Prisma.Decimal;
       allBranches: boolean;
     },
+    soldByStaffId: string,
     now = new Date(),
   ) {
     const row = await tx.subscription.create({
@@ -346,6 +355,7 @@ export class SubscriptionsRepository {
         tenantId,
         memberId,
         planId: plan.id,
+        soldByStaffId,
         planName: plan.name,
         durationDays: plan.durationDays,
         sessionCount: plan.sessionCount,

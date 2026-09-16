@@ -146,6 +146,12 @@ describe('Subscriptions (e2e)', () => {
       status: 'ACTIVE',
     });
     expect(timeSub.body.branches).toEqual([{ id: branchA, name: 'Maadi' }]);
+    expect(timeSub.body.staff).toEqual({
+      id: loginA.body.staff.id,
+      name: 'Owner A',
+      role: 'TENANT_OWNER',
+    });
+    expect(timeSub.body.staff.password).toBeUndefined();
     expect(new Date(timeSub.body.endsAt).getTime()).toBeGreaterThan(
       new Date(timeSub.body.startsAt).getTime(),
     );
@@ -171,6 +177,12 @@ describe('Subscriptions (e2e)', () => {
       expect.objectContaining({ id: branchA, name: 'Maadi' }),
     );
     expect(listed.body.data[0].dueAmount).toBeGreaterThan(0);
+
+    const soldByOwner = await request(app.getHttpServer())
+      .get(`/api/v1/subscriptions?soldByStaffId=${loginA.body.staff.id}`)
+      .set('Authorization', `Bearer ${tokenA}`)
+      .expect(200);
+    expect(soldByOwner.body.total).toBe(2);
 
     const unpaid = await request(app.getHttpServer())
       .get('/api/v1/subscriptions?unpaid=true')

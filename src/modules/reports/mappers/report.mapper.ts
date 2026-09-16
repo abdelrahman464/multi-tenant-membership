@@ -95,6 +95,7 @@ export function subscriptionCsvRow(
     expiredAt: Date | null;
     createdAt: Date;
     member: { name: string; phone: string; status: string };
+    staff: { name: string } | null;
     tenant: { currency: string };
   },
   paidTotal: number,
@@ -106,6 +107,7 @@ export function subscriptionCsvRow(
     row.member.phone,
     row.member.status,
     row.planName,
+    row.staff?.name ?? null,
     row.status,
     row.durationDays,
     row.sessionCount,

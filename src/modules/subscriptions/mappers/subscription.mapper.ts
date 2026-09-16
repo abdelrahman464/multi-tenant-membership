@@ -34,6 +34,7 @@ export type PublicSubscription = {
   status: SubscriptionRow['status'];
   createdAt: Date;
   member: SubscriptionRow['member'];
+  staff: SubscriptionRow['staff'];
   plan: {
     id: string;
     name: string;
@@ -84,6 +85,7 @@ export function toPublicSubscription(
     status: row.status,
     createdAt: row.createdAt,
     member: row.member,
+    staff: row.staff,
     plan: {
       id: row.plan.id,
       name: row.plan.name,

@@ -141,6 +141,7 @@ export class ReportsRepository {
         tenantId,
         ...(query.memberId ? { memberId: query.memberId } : {}),
         ...(query.planId ? { planId: query.planId } : {}),
+        ...(query.soldByStaffId ? { soldByStaffId: query.soldByStaffId } : {}),
         ...(query.status ? { status: query.status } : {}),
       };
       const deskIds = await this.subscriptionsRepository.deskListIds(
@@ -182,6 +183,7 @@ export class ReportsRepository {
           member: {
             select: { name: true, phone: true, status: true },
           },
+          staff: { select: { name: true } },
           tenant: { select: { currency: true } },
         },
       });

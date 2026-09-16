@@ -217,6 +217,7 @@ describe('Reports (e2e)', () => {
     );
     expect(subscriptionsCsv.text).toContain('Gold 30');
     expect(subscriptionsCsv.text).toContain('Ahmed Hassan');
+    expect(subscriptionsCsv.text).toContain('Owner A');
     expect(subscriptionsCsv.text).toContain('1000');
     expect(subscriptionsCsv.text).toContain('600');
     expect(subscriptionsCsv.text).not.toContain(subA.body.id);

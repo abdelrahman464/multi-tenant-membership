@@ -72,7 +72,7 @@ describe('Subscription lifecycle (e2e)', () => {
     expect(defaults.body.freezeEnabled).toBe(false);
     expect(defaults.body.graceEnabled).toBe(false);
     expect(defaults.body.requirePaymentForAccess).toBe(false);
-    expect(defaults.body.minPaidPercentForAccess).toBe(50);
+    expect(defaults.body.minPaidPercentForAccess).toBe(70);
 
     const member = await request(app.getHttpServer())
       .post('/api/v1/members')
@@ -209,6 +209,7 @@ describe('Subscription lifecycle (e2e)', () => {
     expect(renewed.body.planId).toBe(plan.body.id);
     expect(renewed.body.sessionCount).toBe(8);
     expect(renewed.body.sessionsRemaining).toBe(8);
+    expect(renewed.body.staff.id).toBe(login.body.staff.id);
     expect(
       new Date(renewed.body.endsAt).getTime() -
         new Date(renewed.body.startsAt).getTime(),

@@ -4,6 +4,7 @@ export const SUBSCRIPTION_FILTER_FIELDS = [
   'memberId',
   'planId',
   'status',
+  'soldByStaffId',
 ] as const;
 export const SUBSCRIPTION_SORT_FIELDS = [
   'createdAt',
@@ -24,6 +25,9 @@ export const SUBSCRIPTION_INCLUDE = {
   },
   member: {
     select: { id: true, name: true, phone: true, status: true },
+  },
+  staff: {
+    select: { id: true, name: true, role: true },
   },
   plan: {
     select: {

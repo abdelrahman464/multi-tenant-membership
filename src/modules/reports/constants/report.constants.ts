@@ -44,6 +44,7 @@ export const SUBSCRIPTION_CSV_HEADERS = [
   'memberPhone',
   'memberStatus',
   'plan',
+  'soldBy',
   'status',
   'durationDays',
   'sessionCount',
