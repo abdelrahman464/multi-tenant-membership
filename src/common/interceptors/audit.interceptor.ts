@@ -28,13 +28,11 @@ export class AuditInterceptor implements NestInterceptor {
       return next.handle();
     }
 
-    return next
-      .handle()
-      .pipe(
-        mergeMap((body) =>
-          from(this.persist(context, options, body).then(() => body)),
-        ),
-      );
+    return next.handle().pipe(
+      mergeMap((body) =>
+        from(this.persist(context, options, body).then(() => body)),
+      ),
+    );
   }
 
   private async persist(
@@ -84,10 +82,7 @@ function staffFromBody(
   return undefined;
 }
 
-function entityIdOf(
-  body: unknown,
-  paramId?: string | string[],
-): string | null {
+function entityIdOf(body: unknown, paramId?: string | string[]): string | null {
   if (body && typeof body === 'object' && 'id' in body) {
     const id = (body as { id?: unknown }).id;
     if (typeof id === 'string') return id;

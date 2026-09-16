@@ -2,7 +2,7 @@
 
 Staff-only B2B API for gyms and academies. One Postgres database, many tenants (businesses), branches as locations. Isolation is `tenant_id` plus **row-level security (RLS)**.
 
-**Phase 13 (current):** hardening. Redis rate limits, a gym audit log, and indexes for dashboard/reports.
+**Phase 14 (current):** subscriptions CSV. Staff can download sold plans with the same desk filters as the list API.
 
 | | |
 |---|---|
@@ -134,6 +134,7 @@ Roles: `TENANT_OWNER`, `ADMIN`, `BRANCH_STAFF`. Role is loaded from the database
 | GET | `/api/v1/reports/members` | Any staff (CSV; `search`, `status`, `homeBranchId`) |
 | GET | `/api/v1/reports/payments` | Any staff (CSV; `from`, `to`, `memberId`, `subscriptionId`, `planId`, `branchId`, `method`) |
 | GET | `/api/v1/reports/checkIns` | Any staff (CSV; `from`, `to`, `memberId`, `branchId`, `subscriptionId`) |
+| GET | `/api/v1/reports/subscriptions` | Any staff (CSV; `memberId`, `planId`, `status`, `unpaid`, `inProgress`, `completedUnrenewed`, `expired`) |
 | GET | `/api/v1/audit` | Owner, admin (`action`, `staffId`, `entityType`, `entityId`, `from`, `to`, `sort`, `page`, `limit`) |
 
 `BRANCH_STAFF` must be assigned a `branchId` in this tenant. Admins are not assigned to one branch. Nobody can create a second `TENANT_OWNER` through the API.
@@ -181,7 +182,7 @@ A live plan always beats a grace plan. So if Ahmed also has an old expired month
 
 `GET /dashboard` is the morning screen. Optional `from` and `to` (`YYYY-MM-DD`, gym calendar, inclusive, max 366 days) filter **activity**: check-ins, collections, and members who joined in that window. Omit both to use today. Members on the books, live/frozen/grace/expired sold plans, ending-soon (7 days), `completedUnrenewed` (same rule as `GET /subscriptions?completedUnrenewed=true`), and remaining **due** are always *now*, not historical. Check-ins include unique members and a per-branch split. Collections split cash vs card. Fully paid and free plans (`price` 0) are not in `due`. Gym B never sees gym A’s numbers.
 
-`GET /reports/members`, `/reports/payments`, and `/reports/checkIns` return UTF-8 CSV (`text/csv`, `Content-Disposition: attachment`). Members is a snapshot of the gym now (`search`, `status`, `homeBranchId`). Payments and check-ins use the same gym-calendar `from`/`to` as the dashboard (omit both for today, max 366 days, max 10 000 rows). Payment filters match the list API (`memberId`, `subscriptionId`, `planId`, `branchId`, `method`). Check-in filters match the list API (`memberId`, `branchId`, `subscriptionId`). Formula-like cells are prefixed so Excel will not execute them. Gym B never downloads gym A’s rows. No PDF in this phase.
+`GET /reports/members`, `/reports/payments`, `/reports/checkIns`, and `/reports/subscriptions` return UTF-8 CSV (`text/csv`, `Content-Disposition: attachment`). Columns use **names** (member, plan, branch, staff), not UUIDs; phone distinguishes two people with the same name. Members also lists sold `plans` (names). In Postman use **Send and Download** (the arrow next to Send), not Send — Send only shows the text in the body tab. Members and subscriptions are a snapshot of the gym now. Payments and check-ins use the same gym-calendar `from`/`to` as the dashboard (omit both for today, max 366 days, max 10 000 rows). Subscription filters match the list API (`memberId`, `planId`, `status`, `unpaid`, `inProgress`, `completedUnrenewed`, `expired`). Payment filters match the list API (`memberId`, `subscriptionId`, `planId`, `branchId`, `method`). Check-in filters match the list API (`memberId`, `branchId`, `subscriptionId`). Formula-like cells are prefixed so Excel will not execute them. Gym B never downloads gym A’s rows. No PDF in this phase.
 
 Rate limits are per client IP in Redis (skipped in tests). Defaults: login 20/min, refresh 60/min, reports 30/min, platform 60/min, other API 180/min. Over the cap is `429 RATE_LIMITED` with `Retry-After`. If Redis is down, the limiter fails open so the desk is not locked; login still needs Redis for sessions. `/health` is not limited.
 
@@ -239,4 +240,4 @@ The API image runs `prisma migrate deploy` then `node dist/main.js`. Jenkins tag
 
 ## Next
 
-**Forgot password / WhatsApp / SMS:** still need a real mailer or messaging provider. Not in this phase.
+**Forgot password / WhatsApp / SMS:** still need a real mailer or messaging provider. PDF receipts and payment void/refund are not in this phase.

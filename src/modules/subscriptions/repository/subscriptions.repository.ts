@@ -39,27 +39,12 @@ export class SubscriptionsRepository {
 
     return this.prisma.withTenant(tenantId, async (tx) => {
       await this.settleSubscriptionState(tx, tenantId);
-      const idFilters: string[][] = [];
-      if (query.unpaid === true) {
-        idFilters.push(await this.unpaidSubscriptionIds(tx, tenantId));
-      }
-      if (query.inProgress === true) {
-        idFilters.push(await this.inProgressSubscriptionIds(tx, tenantId));
-      }
-      if (query.completedUnrenewed === true) {
-        idFilters.push(
-          await this.completedUnrenewedSubscriptionIds(tx, tenantId),
-        );
-      }
-      if (query.expired === true) {
-        idFilters.push(await this.expiredSubscriptionIds(tx, tenantId));
-      }
-      if (idFilters.length > 0) {
-        const ids = intersectIds(idFilters);
-        if (ids.length === 0) {
+      const deskIds = await this.deskListIds(tx, tenantId, query);
+      if (deskIds) {
+        if (deskIds.length === 0) {
           return features.paginateResult([], 0);
         }
-        scopedWhere.AND = [...asAnd(scopedWhere.AND), { id: { in: ids } }];
+        scopedWhere.AND = [...asAnd(scopedWhere.AND), { id: { in: deskIds } }];
       }
       const [rows, total] = await Promise.all([
         tx.subscription.findMany({
@@ -389,6 +374,37 @@ export class SubscriptionsRepository {
     subscriptionId?: string,
   ) {
     return this.settleSubscriptionState(tx, tenantId, subscriptionId);
+  }
+
+  async deskListIds(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    query: {
+      unpaid?: boolean;
+      inProgress?: boolean;
+      completedUnrenewed?: boolean;
+      expired?: boolean;
+    },
+  ): Promise<string[] | undefined> {
+    const idFilters: string[][] = [];
+    if (query.unpaid === true) {
+      idFilters.push(await this.unpaidSubscriptionIds(tx, tenantId));
+    }
+    if (query.inProgress === true) {
+      idFilters.push(await this.inProgressSubscriptionIds(tx, tenantId));
+    }
+    if (query.completedUnrenewed === true) {
+      idFilters.push(
+        await this.completedUnrenewedSubscriptionIds(tx, tenantId),
+      );
+    }
+    if (query.expired === true) {
+      idFilters.push(await this.expiredSubscriptionIds(tx, tenantId));
+    }
+    if (idFilters.length === 0) {
+      return undefined;
+    }
+    return intersectIds(idFilters);
   }
 
   recordLifecycleNotifications(

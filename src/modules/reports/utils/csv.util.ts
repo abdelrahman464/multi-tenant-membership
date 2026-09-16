@@ -25,3 +25,20 @@ export function toCsv(
   ];
   return `\uFEFF${lines.join('\r\n')}\r\n`;
 }
+
+export function csvFilename(kind: string, from: string, to: string): string {
+  return from === to ? `${kind}-${from}.csv` : `${kind}-${from}_${to}.csv`;
+}
+
+export function csvContentDisposition(filename: string): string {
+  return `attachment; filename="${filename}"; filename*=UTF-8''${encodeURIComponent(filename)}`;
+}
+
+export function applyCsvDownloadHeaders(
+  res: { setHeader(name: string, value: string): void },
+  filename: string,
+): void {
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', csvContentDisposition(filename));
+  res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition');
+}

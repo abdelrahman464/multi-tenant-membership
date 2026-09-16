@@ -1,24 +1,25 @@
 import { roundMoney } from '../../payments/mappers/payment.mapper';
 
 export function memberCsvRow(row: {
-  id: string;
   name: string;
   phone: string;
   email: string | null;
   status: string;
-  homeBranchId: string;
   notes: string | null;
   createdAt: Date;
-  homeBranch: { id: string; name: string };
+  homeBranch: { name: string };
+  subscriptions: { planName: string }[];
 }): Array<string | Date | null> {
+  const plans = [
+    ...new Set(row.subscriptions.map((item) => item.planName)),
+  ].join('; ');
   return [
-    row.id,
     row.name,
     row.phone,
     row.email,
     row.status,
-    row.homeBranchId,
     row.homeBranch.name,
+    plans || null,
     row.notes,
     row.createdAt,
   ];
@@ -26,17 +27,15 @@ export function memberCsvRow(row: {
 
 export function paymentCsvRow(
   row: {
-    id: string;
     paidAt: Date;
     method: string;
     amount: { toString(): string } | number;
     currency: string;
     notes: string | null;
-    member: { id: string; name: string; phone: string };
-    branch: { id: string; name: string };
-    staff: { id: string; name: string };
+    member: { name: string; phone: string };
+    branch: { name: string };
+    staff: { name: string };
     subscription: {
-      id: string;
       planName: string;
       price: { toString(): string } | number;
     };
@@ -46,21 +45,16 @@ export function paymentCsvRow(
   const price = roundMoney(Number(row.subscription.price));
   const paid = roundMoney(paidTotal);
   return [
-    row.id,
     row.paidAt,
     row.method,
     roundMoney(Number(row.amount)),
     row.currency,
     row.notes,
-    row.member.id,
     row.member.name,
     row.member.phone,
-    row.branch.id,
-    row.branch.name,
-    row.staff.id,
-    row.staff.name,
-    row.subscription.id,
     row.subscription.planName,
+    row.branch.name,
+    row.staff.name,
     price,
     paid,
     roundMoney(Math.max(0, price - paid)),
@@ -68,25 +62,60 @@ export function paymentCsvRow(
 }
 
 export function checkInCsvRow(row: {
-  id: string;
   checkedInAt: Date;
-  member: { id: string; name: string; phone: string };
-  branch: { id: string; name: string };
-  staff: { id: string; name: string };
-  subscription: { id: string; planName: string; status: string };
+  member: { name: string; phone: string };
+  branch: { name: string };
+  staff: { name: string };
+  subscription: { planName: string; status: string };
 }): Array<string | Date> {
   return [
-    row.id,
     row.checkedInAt,
-    row.member.id,
     row.member.name,
     row.member.phone,
-    row.branch.id,
-    row.branch.name,
-    row.staff.id,
-    row.staff.name,
-    row.subscription.id,
     row.subscription.planName,
     row.subscription.status,
+    row.branch.name,
+    row.staff.name,
+  ];
+}
+
+export function subscriptionCsvRow(
+  row: {
+    status: string;
+    planName: string;
+    durationDays: number;
+    sessionCount: number | null;
+    sessionsRemaining: number | null;
+    maxVisitsPerDay: number;
+    price: { toString(): string } | number;
+    startsAt: Date;
+    endsAt: Date;
+    expiredAt: Date | null;
+    createdAt: Date;
+    member: { name: string; phone: string; status: string };
+    tenant: { currency: string };
+  },
+  paidTotal: number,
+): Array<string | number | Date | null> {
+  const price = roundMoney(Number(row.price));
+  const paid = roundMoney(paidTotal);
+  return [
+    row.member.name,
+    row.member.phone,
+    row.member.status,
+    row.planName,
+    row.status,
+    row.durationDays,
+    row.sessionCount,
+    row.sessionsRemaining,
+    row.maxVisitsPerDay,
+    price,
+    paid,
+    roundMoney(Math.max(0, price - paid)),
+    row.tenant.currency,
+    row.startsAt,
+    row.endsAt,
+    row.expiredAt,
+    row.createdAt,
   ];
 }

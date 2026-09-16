@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { ErrorCode } from '../../../common/constants/error-codes';
 import { AppHttpException } from '../../../common/errors/app-http.exception';
 import { PrismaService } from '../../../database/prisma.service';
+import { SubscriptionsRepository } from '../../subscriptions/repository/subscriptions.repository';
 import {
   zonedYmd,
   zonedYmdRangeBounds,
@@ -14,6 +15,7 @@ import { REPORT_MAX_ROWS } from '../constants/report.constants';
 import { ExportCheckInsQueryDto } from '../dto/export-check-ins-query.dto';
 import { ExportMembersQueryDto } from '../dto/export-members-query.dto';
 import { ExportPaymentsQueryDto } from '../dto/export-payments-query.dto';
+import { ExportSubscriptionsQueryDto } from '../dto/export-subscriptions-query.dto';
 
 export type ReportCalendar = {
   timezone: string;
@@ -25,7 +27,10 @@ export type ReportCalendar = {
 
 @Injectable()
 export class ReportsRepository {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly subscriptionsRepository: SubscriptionsRepository,
+  ) {}
 
   findMembers(tenantId: string, query: ExportMembersQueryDto) {
     const search = typeof query.search === 'string' ? query.search.trim() : '';
@@ -50,15 +55,17 @@ export class ReportsRepository {
         orderBy: { createdAt: 'desc' },
         take: REPORT_MAX_ROWS,
         select: {
-          id: true,
           name: true,
           phone: true,
           email: true,
           status: true,
-          homeBranchId: true,
           notes: true,
           createdAt: true,
-          homeBranch: { select: { id: true, name: true } },
+          homeBranch: { select: { name: true } },
+          subscriptions: {
+            select: { planName: true },
+            orderBy: { createdAt: 'desc' },
+          },
         },
       });
       return { rows, from: today, to: today };
@@ -123,6 +130,66 @@ export class ReportsRepository {
         include: CHECKIN_INCLUDE,
       });
       return { rows, from: calendar.from, to: calendar.to };
+    });
+  }
+
+  findSubscriptions(tenantId: string, query: ExportSubscriptionsQueryDto) {
+    return this.prisma.withTenant(tenantId, async (tx) => {
+      await this.subscriptionsRepository.settleInTx(tx, tenantId);
+      const where: Prisma.SubscriptionWhereInput = {
+        tenantId,
+        ...(query.memberId ? { memberId: query.memberId } : {}),
+        ...(query.planId ? { planId: query.planId } : {}),
+        ...(query.status ? { status: query.status } : {}),
+      };
+      const deskIds = await this.subscriptionsRepository.deskListIds(
+        tx,
+        tenantId,
+        query,
+      );
+      if (deskIds) {
+        if (deskIds.length === 0) {
+          const today = await this.todayYmd(tx, tenantId);
+          return {
+            rows: [],
+            paid: new Map<string, number>(),
+            from: today,
+            to: today,
+          };
+        }
+        where.id = { in: deskIds };
+      }
+      await this.assertRowBudget(tx.subscription.count({ where }));
+      const today = await this.todayYmd(tx, tenantId);
+      const rows = await tx.subscription.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        take: REPORT_MAX_ROWS,
+        select: {
+          id: true,
+          status: true,
+          planName: true,
+          durationDays: true,
+          sessionCount: true,
+          sessionsRemaining: true,
+          maxVisitsPerDay: true,
+          price: true,
+          startsAt: true,
+          endsAt: true,
+          expiredAt: true,
+          createdAt: true,
+          member: {
+            select: { name: true, phone: true, status: true },
+          },
+          tenant: { select: { currency: true } },
+        },
+      });
+      const paid = await this.paidTotals(
+        tx,
+        tenantId,
+        rows.map((row) => row.id),
+      );
+      return { rows, paid, from: today, to: today };
     });
   }
 

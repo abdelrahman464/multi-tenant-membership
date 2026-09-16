@@ -162,8 +162,13 @@ describe('Reports (e2e)', () => {
       /attachment; filename="members-\d{4}-\d{2}-\d{2}\.csv"/,
     );
     expect(membersCsv.text.startsWith('\uFEFF')).toBe(true);
+    expect(membersCsv.text).toContain(
+      'member,phone,email,status,homeBranch,plans',
+    );
     expect(membersCsv.text).toContain('Ahmed Hassan');
     expect(membersCsv.text).toContain('+201006660001');
+    expect(membersCsv.text).toContain('Gold 30');
+    expect(membersCsv.text).not.toContain(memberA.body.id);
     expect(membersCsv.text).not.toContain('Other Gym');
 
     const paymentsCsv = await request(app.getHttpServer())
@@ -171,10 +176,13 @@ describe('Reports (e2e)', () => {
       .set('Authorization', `Bearer ${tokenA}`)
       .expect(200);
     expect(paymentsCsv.headers['content-type']).toMatch(/text\/csv/);
+    expect(paymentsCsv.text).toContain('member,memberPhone,plan');
+    expect(paymentsCsv.text).toContain('Ahmed Hassan');
     expect(paymentsCsv.text).toContain('400');
     expect(paymentsCsv.text).toContain('CASH');
     expect(paymentsCsv.text).toContain('Gold 30');
     expect(paymentsCsv.text).toContain('"Partial, desk"');
+    expect(paymentsCsv.text).not.toContain(subA.body.id);
     expect(paymentsCsv.text).not.toContain('Other Gym');
 
     const emptyPayments = await request(app.getHttpServer())
@@ -190,9 +198,36 @@ describe('Reports (e2e)', () => {
       .get('/api/v1/reports/checkIns')
       .set('Authorization', `Bearer ${tokenA}`)
       .expect(200);
+    expect(checkInsCsv.text).toContain('member,memberPhone,plan');
     expect(checkInsCsv.text).toContain('Ahmed Hassan');
     expect(checkInsCsv.text).toContain('Maadi');
-    expect(checkInsCsv.text).toContain(subA.body.id);
+    expect(checkInsCsv.text).toContain('Gold 30');
+    expect(checkInsCsv.text).not.toContain(subA.body.id);
+
+    const subscriptionsCsv = await request(app.getHttpServer())
+      .get('/api/v1/reports/subscriptions')
+      .set('Authorization', `Bearer ${tokenA}`)
+      .expect(200);
+    expect(subscriptionsCsv.headers['content-type']).toMatch(/text\/csv/);
+    expect(subscriptionsCsv.headers['content-disposition']).toMatch(
+      /attachment; filename="subscriptions-\d{4}-\d{2}-\d{2}\.csv"/,
+    );
+    expect(subscriptionsCsv.text).toContain(
+      'member,memberPhone,memberStatus,plan',
+    );
+    expect(subscriptionsCsv.text).toContain('Gold 30');
+    expect(subscriptionsCsv.text).toContain('Ahmed Hassan');
+    expect(subscriptionsCsv.text).toContain('1000');
+    expect(subscriptionsCsv.text).toContain('600');
+    expect(subscriptionsCsv.text).not.toContain(subA.body.id);
+    expect(subscriptionsCsv.text).not.toContain('Other Gym');
+
+    const unpaidSubs = await request(app.getHttpServer())
+      .get('/api/v1/reports/subscriptions?unpaid=true')
+      .set('Authorization', `Bearer ${tokenA}`)
+      .expect(200);
+    expect(unpaidSubs.text).toContain('Gold 30');
+    expect(unpaidSubs.text).toContain('Ahmed Hassan');
 
     const badRange = await request(app.getHttpServer())
       .get('/api/v1/reports/payments?from=2026-09-15&to=2026-09-01')
@@ -206,5 +241,12 @@ describe('Reports (e2e)', () => {
       .expect(200);
     expect(membersB.text).toContain('Other Gym');
     expect(membersB.text).not.toContain('Ahmed Hassan');
+
+    const subsB = await request(app.getHttpServer())
+      .get('/api/v1/reports/subscriptions')
+      .set('Authorization', `Bearer ${tokenB}`)
+      .expect(200);
+    expect(subsB.text).not.toContain('Ahmed Hassan');
+    expect(subsB.text).not.toContain('Gold 30');
   });
 });

@@ -1,4 +1,4 @@
-import { csvCell, toCsv } from './csv.util';
+import { csvCell, csvContentDisposition, csvFilename, toCsv } from './csv.util';
 
 describe('csv.util', () => {
   it('quotes commas, quotes, and newlines', () => {
@@ -18,5 +18,14 @@ describe('csv.util', () => {
     const csv = toCsv(['name', 'amount'], [['Ahmed', 200]]);
     expect(csv.startsWith('\uFEFF')).toBe(true);
     expect(csv).toContain('name,amount\r\nAhmed,200\r\n');
+  });
+
+  it('builds a download filename and Content-Disposition', () => {
+    expect(csvFilename('payments', '2026-09-01', '2026-09-15')).toBe(
+      'payments-2026-09-01_2026-09-15.csv',
+    );
+    expect(csvContentDisposition('members-2026-09-16.csv')).toContain(
+      'attachment; filename="members-2026-09-16.csv"',
+    );
   });
 });

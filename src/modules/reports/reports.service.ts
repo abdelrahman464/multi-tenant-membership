@@ -7,6 +7,7 @@ import {
   ymdInclusiveDayCount,
 } from '../check-ins/utils/tenant-day.util';
 import {
+  SUBSCRIPTION_CSV_HEADERS,
   CHECKIN_CSV_HEADERS,
   MEMBER_CSV_HEADERS,
   PAYMENT_CSV_HEADERS,
@@ -16,13 +17,15 @@ import { ExportCheckInsQueryDto } from './dto/export-check-ins-query.dto';
 import { ExportDateRangeQueryDto } from './dto/export-date-range-query.dto';
 import { ExportMembersQueryDto } from './dto/export-members-query.dto';
 import { ExportPaymentsQueryDto } from './dto/export-payments-query.dto';
+import { ExportSubscriptionsQueryDto } from './dto/export-subscriptions-query.dto';
 import {
   checkInCsvRow,
   memberCsvRow,
   paymentCsvRow,
+  subscriptionCsvRow,
 } from './mappers/report.mapper';
 import { ReportsRepository } from './repository/reports.repository';
-import { toCsv } from './utils/csv.util';
+import { csvFilename, csvContentDisposition, toCsv } from './utils/csv.util';
 
 @Injectable()
 export class ReportsService {
@@ -74,6 +77,23 @@ export class ReportsService {
     );
   }
 
+  async subscriptions(
+    actor: AuthenticatedUser,
+    query: ExportSubscriptionsQueryDto,
+  ) {
+    const { rows, paid, from, to } =
+      await this.reportsRepository.findSubscriptions(actor.tenantId, query);
+    return this.csvFile(
+      'subscriptions',
+      from,
+      to,
+      toCsv(
+        SUBSCRIPTION_CSV_HEADERS,
+        rows.map((row) => subscriptionCsvRow(row, paid.get(row.id) ?? 0)),
+      ),
+    );
+  }
+
   private resolveRange(query: ExportDateRangeQueryDto): {
     from?: string;
     to?: string;
@@ -106,12 +126,14 @@ export class ReportsService {
     from: string,
     to: string,
     body: string,
-  ): StreamableFile {
-    const filename =
-      from === to ? `${kind}-${from}.csv` : `${kind}-${from}_${to}.csv`;
-    return new StreamableFile(Buffer.from(body, 'utf8'), {
-      type: 'text/csv; charset=utf-8',
-      disposition: `attachment; filename="${filename}"`,
-    });
+  ): { filename: string; file: StreamableFile } {
+    const filename = csvFilename(kind, from, to);
+    return {
+      filename,
+      file: new StreamableFile(Buffer.from(body, 'utf8'), {
+        type: 'text/csv; charset=utf-8',
+        disposition: csvContentDisposition(filename),
+      }),
+    };
   }
 }
