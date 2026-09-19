@@ -7,17 +7,15 @@ import { AppHttpException } from '../../../common/errors/app-http.exception';
 import { PrismaService } from '../../../database/prisma.service';
 import { STAFF_PUBLIC_SELECT } from '../../staff/constants/staff.constants';
 import {
-  BRANCH_FILTER_FIELDS,
-  BRANCH_PUBLIC_SELECT,
-  BRANCH_SEARCH_FIELDS,
-  BRANCH_SORT_FIELDS,
   TENANT_FILTER_FIELDS,
   TENANT_SEARCH_FIELDS,
   TENANT_SORT_FIELDS,
 } from '../constants/tenant.constants';
-import { CreateBranchDto } from '../dto/create-branch.dto';
 import { PersistTenantDto } from '../dto/create-tenant.dto';
-import { ListBranchesQueryDto } from '../dto/list-branches-query.dto';
+import {
+  toBranchHoursWrite,
+  toHoursExceptionsWrite,
+} from '../../branches/utils/branch-hours.util';
 import { ListTenantsQueryDto } from '../dto/list-tenants-query.dto';
 import { UpdateTenantSettingsDto } from '../dto/update-tenant-settings.dto';
 import { SETTINGS_PUBLIC_SELECT } from '../constants/settings.constants';
@@ -33,7 +31,13 @@ export class TenantsRepository {
         data: {
           ...tenant,
           settings: { create: {} },
-          branches: { create: firstBranch },
+          branches: {
+            create: {
+              name: firstBranch.name,
+              ...toBranchHoursWrite(firstBranch.hours),
+              ...toHoursExceptionsWrite(firstBranch.hoursExceptions),
+            },
+          },
           staff: {
             create: {
               name: firstOwner.name,
@@ -131,66 +135,6 @@ export class TenantsRepository {
     );
   }
 
-  addBranch(tenantId: string, dto: CreateBranchDto) {
-    return this.prisma.withPlatform((tx) =>
-      tx.branch.create({
-        data: { tenantId, ...dto },
-        select: BRANCH_PUBLIC_SELECT,
-      }),
-    );
-  }
-
-  createBranch(tenantId: string, name: string) {
-    return this.prisma.withTenant(tenantId, (tx) =>
-      tx.branch.create({
-        data: { tenantId, name },
-        select: BRANCH_PUBLIC_SELECT,
-      }),
-    );
-  }
-
-  findBranchById(tenantId: string, id: string) {
-    return this.prisma.withTenant(tenantId, (tx) =>
-      tx.branch.findFirst({
-        where: { id, tenantId },
-        select: BRANCH_PUBLIC_SELECT,
-      }),
-    );
-  }
-
-  updateBranch(
-    tenantId: string,
-    id: string,
-    data: { name?: string; status?: 'ACTIVE' | 'ARCHIVED' },
-  ) {
-    return this.prisma.withTenant(tenantId, (tx) =>
-      tx.branch.update({
-        where: { id },
-        data,
-        select: BRANCH_PUBLIC_SELECT,
-      }),
-    );
-  }
-
-  countActiveBranches(tenantId: string) {
-    return this.prisma.withTenant(tenantId, (tx) =>
-      tx.branch.count({ where: { tenantId, status: 'ACTIVE' } }),
-    );
-  }
-
-  countActiveStaffOnBranch(tenantId: string, branchId: string) {
-    return this.prisma.withTenant(tenantId, (tx) =>
-      tx.staff.count({
-        where: {
-          tenantId,
-          branchId,
-          status: 'ACTIVE',
-          role: 'BRANCH_STAFF',
-        },
-      }),
-    );
-  }
-
   findSettings(tenantId: string) {
     return this.prisma.withTenant(tenantId, (tx) =>
       tx.tenantSettings.upsert({
@@ -211,36 +155,6 @@ export class TenantsRepository {
         select: SETTINGS_PUBLIC_SELECT,
       }),
     );
-  }
-
-  findBranchesByTenant(tenantId: string, query: ListBranchesQueryDto) {
-    const features = new ApiFeatures(
-      query as unknown as Record<string, unknown>,
-    )
-      .filter(BRANCH_FILTER_FIELDS)
-      .search(BRANCH_SEARCH_FIELDS)
-      .sort(BRANCH_SORT_FIELDS)
-      .paginate();
-
-    const { where, orderBy, skip, take } = features.args();
-    const scopedWhere: Prisma.BranchWhereInput = {
-      ...(where as Prisma.BranchWhereInput),
-      tenantId,
-    };
-
-    return this.prisma.withTenant(tenantId, async (tx) => {
-      const [data, total] = await Promise.all([
-        tx.branch.findMany({
-          where: scopedWhere,
-          orderBy: orderBy as Prisma.BranchOrderByWithRelationInput[],
-          skip,
-          take,
-          select: BRANCH_PUBLIC_SELECT,
-        }),
-        tx.branch.count({ where: scopedWhere }),
-      ]);
-      return features.paginateResult(data, total);
-    });
   }
 
   isUniqueConflict(error: unknown): boolean {
@@ -265,14 +179,6 @@ export class TenantsRepository {
       HttpStatus.CONFLICT,
       ErrorCode.TENANT_SLUG_TAKEN,
       'A tenant with this slug already exists',
-    );
-  }
-
-  branchNameTakenError(): AppHttpException {
-    return new AppHttpException(
-      HttpStatus.CONFLICT,
-      ErrorCode.BRANCH_NAME_TAKEN,
-      'This tenant already has a branch with that name',
     );
   }
 }

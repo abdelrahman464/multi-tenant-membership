@@ -5,7 +5,7 @@ import { AppHttpException } from '../../../common/errors/app-http.exception';
 import { AuthenticatedUser } from '../../../common/types/authenticated-user.type';
 import { ApiFeatures } from '../../../common/utils/api-features.utils';
 import { PrismaService } from '../../../database/prisma.service';
-import { requireActiveBranch } from '../../tenants/utils/require-active-branch.util';
+import { requireActiveBranch } from '../../branches/utils/require-active-branch.util';
 import { StaffRole } from '../../staff/enums/staff-role.enum';
 import {
   PAYMENT_FILTER_FIELDS,

@@ -2,7 +2,7 @@
   "name": "membership-api",
   "version": "0.1.0",
   "private": true,
-  "description": "Staff-facing multi-tenant membership API. Phase 22: gym-owned branches.",
+  "description": "Staff-facing multi-tenant membership API. Phase 26: branch hour exceptions.",
   "engines": {
     "node": ">=22.12.0"
   },

@@ -7,10 +7,15 @@ export async function requireActiveBranch(
   tx: Prisma.TransactionClient,
   tenantId: string,
   branchId: string,
-): Promise<{ id: string; name: string }> {
+): Promise<{
+  id: string;
+  name: string;
+  hours: Prisma.JsonValue | null;
+  hoursExceptions: Prisma.JsonValue | null;
+}> {
   const branch = await tx.branch.findFirst({
     where: { id: branchId, tenantId },
-    select: { id: true, name: true, status: true },
+    select: { id: true, name: true, status: true, hours: true, hoursExceptions: true },
   });
   if (!branch) {
     throw new AppHttpException(
@@ -26,5 +31,10 @@ export async function requireActiveBranch(
       'This branch is archived',
     );
   }
-  return { id: branch.id, name: branch.name };
+  return {
+    id: branch.id,
+    name: branch.name,
+    hours: branch.hours,
+    hoursExceptions: branch.hoursExceptions,
+  };
 }

@@ -8,6 +8,7 @@ export const MEMBER_PUBLIC_SELECT = {
   email: true,
   notes: true,
   status: true,
+  lastCheckedInAt: true,
   createdAt: true,
   updatedAt: true,
   homeBranch: { select: { id: true, name: true } },
@@ -20,4 +21,5 @@ export const MEMBER_SORT_FIELDS = [
   'updatedAt',
   'name',
   'phone',
+  'lastCheckedInAt',
 ] as const;

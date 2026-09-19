@@ -211,6 +211,12 @@ describe('Subscriptions (e2e)', () => {
       .expect(200);
     expect(expiredNone.body.total).toBe(0);
 
+    const endingNone = await request(app.getHttpServer())
+      .get('/api/v1/subscriptions?endingSoon=true')
+      .set('Authorization', `Bearer ${tokenA}`)
+      .expect(200);
+    expect(endingNone.body.total).toBe(0);
+
     await prisma.withTenant(gymA.body.id as string, (tx) =>
       tx.subscription.update({
         where: { id: timeSub.body.id },
@@ -243,6 +249,20 @@ describe('Subscriptions (e2e)', () => {
       .expect(200);
     expect(stillGoing.body.total).toBe(1);
     expect(stillGoing.body.data[0].id).toBe(packSub.body.id);
+
+    await prisma.withTenant(gymA.body.id as string, (tx) =>
+      tx.subscription.update({
+        where: { id: packSub.body.id },
+        data: { endsAt: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000) },
+      }),
+    );
+
+    const endingSoon = await request(app.getHttpServer())
+      .get('/api/v1/subscriptions?endingSoon=true')
+      .set('Authorization', `Bearer ${tokenA}`)
+      .expect(200);
+    expect(endingSoon.body.total).toBe(1);
+    expect(endingSoon.body.data[0].id).toBe(packSub.body.id);
 
     const second = await request(app.getHttpServer())
       .post(`/api/v1/platform/tenants/${gymA.body.id}/branches`)

@@ -9,6 +9,7 @@ import {
   zonedYmdRangeBounds,
 } from '../../check-ins/utils/tenant-day.util';
 import { MEMBER_SEARCH_FIELDS } from '../../members/constants/member.constants';
+import { memberInactivityWhere } from '../../members/utils/member-inactivity.util';
 import { CHECKIN_INCLUDE } from '../../check-ins/constants/check-in.constants';
 import { PAYMENT_INCLUDE } from '../../payments/constants/payment.constants';
 import { REPORT_MAX_ROWS } from '../constants/report.constants';
@@ -35,16 +36,21 @@ export class ReportsRepository {
   findMembers(tenantId: string, query: ExportMembersQueryDto) {
     const search = typeof query.search === 'string' ? query.search.trim() : '';
     const where: Prisma.MemberWhereInput = {
-      tenantId,
-      ...(query.status ? { status: query.status } : {}),
-      ...(query.homeBranchId ? { homeBranchId: query.homeBranchId } : {}),
-      ...(search
-        ? {
-            OR: MEMBER_SEARCH_FIELDS.map((field) => ({
-              [field]: { contains: search, mode: 'insensitive' as const },
-            })),
-          }
-        : {}),
+      AND: [
+        {
+          tenantId,
+          ...(query.status ? { status: query.status } : {}),
+          ...(query.homeBranchId ? { homeBranchId: query.homeBranchId } : {}),
+          ...(search
+            ? {
+                OR: MEMBER_SEARCH_FIELDS.map((field) => ({
+                  [field]: { contains: search, mode: 'insensitive' as const },
+                })),
+              }
+            : {}),
+        },
+        memberInactivityWhere(query),
+      ],
     };
 
     return this.prisma.withTenant(tenantId, async (tx) => {
@@ -61,6 +67,7 @@ export class ReportsRepository {
           email: true,
           status: true,
           notes: true,
+          lastCheckedInAt: true,
           createdAt: true,
           homeBranch: { select: { name: true } },
           subscriptions: {

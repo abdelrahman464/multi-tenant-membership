@@ -14,7 +14,6 @@ import {
 import { Public } from '../../common/decorators/public.decorator';
 import { PlatformKeyGuard } from '../../common/guards/platform-key.guard';
 import { ParseUuidPipe } from '../../common/pipes/parse-uuid.pipe';
-import { CreateBranchDto } from './dto/create-branch.dto';
 import { CreateTenantDto } from './dto/create-tenant.dto';
 import { ListTenantsQueryDto } from './dto/list-tenants-query.dto';
 import { UpdateTenantDto } from './dto/update-tenant.dto';
@@ -63,14 +62,5 @@ export class TenantsController {
   @HttpCode(HttpStatus.OK)
   reactivate(@Param('id', ParseUuidPipe) id: string) {
     return this.tenantsService.reactivate(id);
-  }
-
-  @Post(':id/branches')
-  @HttpCode(HttpStatus.CREATED)
-  addBranch(
-    @Param('id', ParseUuidPipe) id: string,
-    @Body() dto: CreateBranchDto,
-  ) {
-    return this.tenantsService.addBranch(id, dto);
   }
 }

@@ -79,6 +79,10 @@ model Branch {
   tenant    Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   name      String
   status    BranchStatus @default(ACTIVE)
+  /// Weekly open/close in the gym timezone. Null = always open.
+  hours     Json?
+  /// Date overrides (closed or special hours). Null/empty = none.
+  hoursExceptions Json? @map("hours_exceptions")
   createdAt DateTime     @default(now()) @map("created_at")
   updatedAt DateTime     @updatedAt @map("updated_at")
 
@@ -144,10 +148,12 @@ model Member {
   code          String
   phone         String
   email         String?
-  notes         String?
-  status        MemberStatus   @default(ACTIVE)
-  createdAt     DateTime       @default(now()) @map("created_at")
-  updatedAt     DateTime       @updatedAt @map("updated_at")
+  notes            String?
+  status           MemberStatus @default(ACTIVE)
+  /// Latest successful door visit. Null until the first check-in.
+  lastCheckedInAt  DateTime?    @map("last_checked_in_at")
+  createdAt        DateTime     @default(now()) @map("created_at")
+  updatedAt        DateTime     @updatedAt @map("updated_at")
   subscriptions Subscription[]
   notifications Notification[]
   checkIns      CheckIn[]
@@ -159,6 +165,7 @@ model Member {
   @@index([homeBranchId])
   @@index([tenantId, status])
   @@index([tenantId, createdAt])
+  @@index([tenantId, lastCheckedInAt])
   @@map("members")
 }
 
@@ -288,11 +295,13 @@ model SubscriptionFreeze {
 enum NotificationType {
   SUBSCRIPTION_IN_GRACE
   SUBSCRIPTION_EXPIRED
+  SUBSCRIPTION_ENDING_SOON
   CHECKIN_BRANCH_BLOCKED
 }
 
 /// Gym inbox row. One per (type, subscription) so settle/sweep never spam.
 /// IN_GRACE is written at check-in (Phase 9), not when the calendar enters grace.
+/// ENDING_SOON is written on settle while ACTIVE and endsAt is within 7 days.
 /// CHECKIN_BRANCH_BLOCKED is written when the door refuses a selected-location plan.
 /// readAt is shared: the desk is one team, not a per-person bell.
 model Notification {

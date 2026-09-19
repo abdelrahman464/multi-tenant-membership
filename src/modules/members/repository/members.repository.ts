@@ -4,7 +4,7 @@ import { ErrorCode } from '../../../common/constants/error-codes';
 import { AppHttpException } from '../../../common/errors/app-http.exception';
 import { ApiFeatures } from '../../../common/utils/api-features.utils';
 import { PrismaService } from '../../../database/prisma.service';
-import { requireActiveBranch } from '../../tenants/utils/require-active-branch.util';
+import { requireActiveBranch } from '../../branches/utils/require-active-branch.util';
 import {
   MEMBER_FILTER_FIELDS,
   MEMBER_PUBLIC_SELECT,
@@ -15,6 +15,7 @@ import { ListMembersQueryDto } from '../dto/list-members-query.dto';
 import { CreateMemberDto } from '../dto/create-member.dto';
 import { UpdateMemberDto } from '../dto/update-member.dto';
 import { generateMemberCode } from '../utils/member-code.util';
+import { memberInactivityWhere } from '../utils/member-inactivity.util';
 
 @Injectable()
 export class MembersRepository {
@@ -30,9 +31,12 @@ export class MembersRepository {
       .paginate();
 
     const { where, orderBy, skip, take } = features.args();
+    const inactivity = memberInactivityWhere(query);
     const scopedWhere: Prisma.MemberWhereInput = {
-      ...(where as Prisma.MemberWhereInput),
-      tenantId,
+      AND: [
+        { ...(where as Prisma.MemberWhereInput), tenantId },
+        inactivity,
+      ],
     };
 
     return this.prisma.withTenant(tenantId, async (tx) => {

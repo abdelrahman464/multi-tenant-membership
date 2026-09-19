@@ -31,6 +31,21 @@ function zonedParts(date: Date, timeZone: string) {
   };
 }
 
+/** Wall-clock weekday and minutes-from-midnight in the gym timezone. */
+export function zonedClock(
+  now: Date,
+  timeZone: string,
+): { weekday: string; minute: number } {
+  const weekday = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    weekday: 'long',
+  })
+    .format(now)
+    .toLowerCase();
+  const parts = zonedParts(now, timeZone);
+  return { weekday, minute: parts.hour * 60 + parts.minute };
+}
+
 export function addYmdDays(ymd: string, days: number): string {
   const [year, month, day] = ymd.split('-').map(Number);
   const next = new Date(Date.UTC(year, month - 1, day + days));

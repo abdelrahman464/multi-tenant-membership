@@ -1,5 +1,6 @@
 import { Type, Transform } from 'class-transformer';
 import {
+  IsBoolean,
   IsEnum,
   IsInt,
   IsOptional,
@@ -32,6 +33,22 @@ export class ListMembersQueryDto {
   @IsOptional()
   @IsUUID()
   homeBranchId?: string;
+
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }) => {
+    if (value === true || value === 'true') return true;
+    if (value === false || value === 'false') return false;
+    return value;
+  })
+  @IsBoolean()
+  neverVisited?: boolean;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(3650)
+  inactiveDays?: number;
 
   @IsOptional()
   @IsString()

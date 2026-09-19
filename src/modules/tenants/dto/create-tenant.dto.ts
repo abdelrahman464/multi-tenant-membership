@@ -8,7 +8,7 @@ import {
   MinLength,
   ValidateNested,
 } from 'class-validator';
-import { CreateBranchDto } from './create-branch.dto';
+import { CreateBranchDto } from '../../branches/dto/create-branch.dto';
 import { FirstOwnerDto } from './first-owner.dto';
 
 export class CreateTenantDto {

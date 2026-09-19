@@ -18,6 +18,7 @@ import {
   type SubscriptionRow,
 } from '../mappers/subscription.mapper';
 import { expiryCutoff, graceDaysFromSettings } from '../utils/access.util';
+import { endingSoonWhere } from '../utils/ending-soon.util';
 import { addUtcDays, freezeDaysUsedThisYear } from '../utils/freeze.util';
 
 @Injectable()
@@ -449,6 +450,7 @@ export class SubscriptionsRepository {
       inProgress?: boolean;
       completedUnrenewed?: boolean;
       expired?: boolean;
+      endingSoon?: boolean;
     },
   ): Promise<string[] | undefined> {
     const idFilters: string[][] = [];
@@ -466,6 +468,9 @@ export class SubscriptionsRepository {
     if (query.expired === true) {
       idFilters.push(await this.expiredSubscriptionIds(tx, tenantId));
     }
+    if (query.endingSoon === true) {
+      idFilters.push(await this.endingSoonSubscriptionIds(tx, tenantId));
+    }
     if (idFilters.length === 0) {
       return undefined;
     }
@@ -475,7 +480,7 @@ export class SubscriptionsRepository {
   recordLifecycleNotifications(
     tx: Prisma.TransactionClient,
     tenantId: string,
-    type: 'SUBSCRIPTION_IN_GRACE' | 'SUBSCRIPTION_EXPIRED',
+    type: LifecycleNotificationType,
     rows: {
       id: string;
       memberId: string;
@@ -508,6 +513,7 @@ export class SubscriptionsRepository {
     });
     const graceDays = graceDaysFromSettings(settings);
     await this.expireActivePastAccess(tx, tenantId, graceDays, subscriptionId);
+    await this.notifyEndingSoon(tx, tenantId, subscriptionId);
   }
 
   private async expireActivePastAccess(
@@ -551,10 +557,37 @@ export class SubscriptionsRepository {
     await this.recordNotifications(tx, tenantId, 'SUBSCRIPTION_EXPIRED', due);
   }
 
+  private async notifyEndingSoon(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    subscriptionId?: string,
+  ): Promise<void> {
+    const now = new Date();
+    const due = await tx.subscription.findMany({
+      where: {
+        tenantId,
+        ...(subscriptionId ? { id: subscriptionId } : {}),
+        ...endingSoonWhere(now),
+      },
+      select: {
+        id: true,
+        memberId: true,
+        planName: true,
+        member: { select: { name: true } },
+      },
+    });
+    await this.recordNotifications(
+      tx,
+      tenantId,
+      'SUBSCRIPTION_ENDING_SOON',
+      due,
+    );
+  }
+
   private async recordNotifications(
     tx: Prisma.TransactionClient,
     tenantId: string,
-    type: 'SUBSCRIPTION_IN_GRACE' | 'SUBSCRIPTION_EXPIRED',
+    type: LifecycleNotificationType,
     rows: {
       id: string;
       memberId: string;
@@ -662,6 +695,20 @@ export class SubscriptionsRepository {
     return rows.map((row) => row.id);
   }
 
+  private async endingSoonSubscriptionIds(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+  ): Promise<string[]> {
+    const rows = await tx.subscription.findMany({
+      where: {
+        tenantId,
+        ...endingSoonWhere(),
+      },
+      select: { id: true },
+    });
+    return rows.map((row) => row.id);
+  }
+
   async completedUnrenewedSubscriptionIds(
     tx: Prisma.TransactionClient,
     tenantId: string,
@@ -748,6 +795,11 @@ export class SubscriptionsRepository {
     return toPublicSubscription(row, now, { paidTotal: paid });
   }
 }
+
+type LifecycleNotificationType =
+  | 'SUBSCRIPTION_IN_GRACE'
+  | 'SUBSCRIPTION_EXPIRED'
+  | 'SUBSCRIPTION_ENDING_SOON';
 
 function asAnd(
   value: Prisma.SubscriptionWhereInput['AND'],

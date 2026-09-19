@@ -4,7 +4,7 @@ import { ErrorCode } from '../../../common/constants/error-codes';
 import { AppHttpException } from '../../../common/errors/app-http.exception';
 import { ApiFeatures } from '../../../common/utils/api-features.utils';
 import { PrismaService } from '../../../database/prisma.service';
-import { requireActiveBranch } from '../../tenants/utils/require-active-branch.util';
+import { requireActiveBranch } from '../../branches/utils/require-active-branch.util';
 import { SESSION_TENANT_SELECT } from '../../tenants/constants/tenant.constants';
 import {
   STAFF_FILTER_FIELDS,

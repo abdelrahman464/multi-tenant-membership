@@ -29,6 +29,9 @@ export function notificationMessage(
       ? `${memberName}'s ${planName} is not allowed at ${branchName}`
       : `${memberName}'s ${planName} is not allowed at this branch`;
   }
+  if (type === 'SUBSCRIPTION_ENDING_SOON') {
+    return `${memberName}'s ${planName} ends soon`;
+  }
   return `${memberName}'s ${planName} has expired`;
 }
 

@@ -79,7 +79,66 @@ describe('Branches (e2e)', () => {
       .expect(201);
     expect(created.body.name).toBe('Nasr City');
     expect(created.body.status).toBe('ACTIVE');
+    expect(created.body.hours).toBeNull();
     expect(created.body.tenantId).toBe(gym.body.id);
+
+    const week = {
+      sunday: { open: '08:00', close: '16:00' },
+      monday: { open: '06:00', close: '22:00' },
+      tuesday: { open: '06:00', close: '22:00' },
+      wednesday: { open: '06:00', close: '22:00' },
+      thursday: { open: '06:00', close: '22:00' },
+      friday: { open: '06:00', close: '22:00' },
+      saturday: null,
+    };
+    const withHours = await request(app.getHttpServer())
+      .patch(`/api/v1/branches/${created.body.id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ hours: week })
+      .expect(200);
+    expect(withHours.body.hours).toEqual(week);
+
+    await request(app.getHttpServer())
+      .patch(`/api/v1/branches/${created.body.id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ hours: { monday: { open: '06:00', close: '22:00' } } })
+      .expect(400);
+
+    const alwaysOpen = await request(app.getHttpServer())
+      .patch(`/api/v1/branches/${created.body.id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ hours: null })
+      .expect(200);
+    expect(alwaysOpen.body.hours).toBeNull();
+    expect(alwaysOpen.body.hoursExceptions).toBeNull();
+
+    const holiday = await request(app.getHttpServer())
+      .patch(`/api/v1/branches/${created.body.id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        hoursExceptions: [
+          { date: '2026-09-21', hours: { open: '10:00', close: '14:00' } },
+          { date: '2026-09-20', hours: null },
+        ],
+      })
+      .expect(200);
+    expect(holiday.body.hoursExceptions).toEqual([
+      { date: '2026-09-20', hours: null },
+      { date: '2026-09-21', hours: { open: '10:00', close: '14:00' } },
+    ]);
+
+    await request(app.getHttpServer())
+      .patch(`/api/v1/branches/${created.body.id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ hoursExceptions: [{ date: '20-09-2026', hours: null }] })
+      .expect(400);
+
+    const cleared = await request(app.getHttpServer())
+      .patch(`/api/v1/branches/${created.body.id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ hoursExceptions: null })
+      .expect(200);
+    expect(cleared.body.hoursExceptions).toBeNull();
 
     const renamed = await request(app.getHttpServer())
       .patch(`/api/v1/branches/${created.body.id}`)

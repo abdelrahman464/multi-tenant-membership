@@ -163,7 +163,7 @@ describe('Reports (e2e)', () => {
     );
     expect(membersCsv.text.startsWith('\uFEFF')).toBe(true);
     expect(membersCsv.text).toContain(
-      'member,code,phone,email,status,homeBranch,plans',
+      'member,code,phone,email,status,homeBranch,lastCheckedInAt,plans',
     );
     expect(membersCsv.text).toContain('Ahmed Hassan');
     expect(membersCsv.text).toContain('+201006660001');

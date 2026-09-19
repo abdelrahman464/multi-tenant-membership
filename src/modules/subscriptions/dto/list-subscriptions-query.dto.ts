@@ -62,6 +62,12 @@ export class ListSubscriptionsQueryDto {
   @IsBoolean()
   expired?: boolean;
 
+  /** ACTIVE and endsAt within the next 7 rolling days (same as dashboard). */
+  @IsOptional()
+  @Transform(toQueryBoolean)
+  @IsBoolean()
+  endingSoon?: boolean;
+
   @IsOptional()
   @IsString()
   sort?: string;

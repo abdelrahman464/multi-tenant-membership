@@ -1,5 +1,8 @@
 import { Prisma } from '@prisma/client';
 
+/** Same rolling window as dashboard endingSoon and the inbox row. */
+export const SUBSCRIPTION_ENDING_SOON_DAYS = 7;
+
 export const SUBSCRIPTION_FILTER_FIELDS = [
   'memberId',
   'planId',

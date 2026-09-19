@@ -6,9 +6,8 @@ import {
   zonedYmdRangeBounds,
 } from '../../check-ins/utils/tenant-day.util';
 import { roundMoney } from '../../payments/mappers/payment.mapper';
-import { addUtcDays } from '../../subscriptions/utils/freeze.util';
+import { endingSoonWhere } from '../../subscriptions/utils/ending-soon.util';
 import { SubscriptionsRepository } from '../../subscriptions/repository/subscriptions.repository';
-import { DASHBOARD_ENDING_SOON_DAYS } from '../constants/dashboard.constants';
 import { PublicDashboard } from '../types/dashboard.type';
 
 @Injectable()
@@ -37,8 +36,6 @@ export class DashboardRepository {
       const to = range.to ?? range.from ?? today;
       const { gte, lt } = zonedYmdRangeBounds(from, to, timezone);
       const inRange = { gte, lt };
-      const endingSoonUntil = addUtcDays(now, DASHBOARD_ENDING_SOON_DAYS);
-
       const [
         activeMembers,
         archivedMembers,
@@ -66,8 +63,7 @@ export class DashboardRepository {
         tx.subscription.count({
           where: {
             tenantId,
-            status: SubscriptionStatus.ACTIVE,
-            endsAt: { gte: now, lte: endingSoonUntil },
+            ...endingSoonWhere(now),
           },
         }),
         tx.checkIn.count({

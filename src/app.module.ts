@@ -23,6 +23,7 @@ import { PaymentsModule } from './modules/payments/payments.module';
 import { PlansModule } from './modules/plans/plans.module';
 import { StaffModule } from './modules/staff/staff.module';
 import { SubscriptionsModule } from './modules/subscriptions/subscriptions.module';
+import { BranchesModule } from './modules/branches/branches.module';
 import { TenantsModule } from './modules/tenants/tenants.module';
 import { RedisModule } from './redis/redis.module';
 
@@ -41,6 +42,7 @@ import { RedisModule } from './redis/redis.module';
     RedisModule,
     HealthModule,
     TenantsModule,
+    BranchesModule,
     StaffModule,
     MembersModule,
     PlansModule,

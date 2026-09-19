@@ -125,6 +125,18 @@ describe('Notifications (e2e)', () => {
       .send({ memberId: member.body.id, planId: plan.body.id })
       .expect(201);
 
+    const notYetDue = await request(app.getHttpServer())
+      .get('/api/v1/notifications')
+      .set('Authorization', `Bearer ${tokenA}`)
+      .expect(200);
+    expect(notYetDue.body.total).toBe(0);
+
+    const endingNone = await request(app.getHttpServer())
+      .get('/api/v1/subscriptions?endingSoon=true')
+      .set('Authorization', `Bearer ${tokenA}`)
+      .expect(200);
+    expect(endingNone.body.total).toBe(0);
+
     await prisma.withTenant(tenantA, (tx) =>
       tx.subscription.update({
         where: { id: noGrace.body.id },
@@ -260,5 +272,48 @@ describe('Notifications (e2e)', () => {
       .set('Authorization', `Bearer ${tokenB}`)
       .expect(404);
     expect(otherGym.body.code).toBe(ErrorCode.NOTIFICATION_NOT_FOUND);
+
+    const soon = await request(app.getHttpServer())
+      .post('/api/v1/subscriptions')
+      .set('Authorization', `Bearer ${tokenA}`)
+      .send({ memberId: member.body.id, planId: plan.body.id })
+      .expect(201);
+
+    await prisma.withTenant(tenantA, (tx) =>
+      tx.subscription.update({
+        where: { id: soon.body.id },
+        data: { endsAt: addUtcDays(new Date(), 3) },
+      }),
+    );
+
+    const endingInbox = await request(app.getHttpServer())
+      .get('/api/v1/notifications?type=SUBSCRIPTION_ENDING_SOON')
+      .set('Authorization', `Bearer ${tokenA}`)
+      .expect(200);
+    expect(endingInbox.body.total).toBe(1);
+    expect(endingInbox.body.data[0].subscriptionId).toBe(soon.body.id);
+    expect(endingInbox.body.data[0].message).toBe(
+      "Ahmed Hassan's Gold 30 ends soon",
+    );
+    expect(endingInbox.body.data[0].unread).toBe(true);
+
+    const endingAgain = await request(app.getHttpServer())
+      .get('/api/v1/notifications?type=SUBSCRIPTION_ENDING_SOON')
+      .set('Authorization', `Bearer ${tokenA}`)
+      .expect(200);
+    expect(endingAgain.body.total).toBe(1);
+
+    const endingList = await request(app.getHttpServer())
+      .get('/api/v1/subscriptions?endingSoon=true')
+      .set('Authorization', `Bearer ${tokenA}`)
+      .expect(200);
+    expect(endingList.body.total).toBe(1);
+    expect(endingList.body.data[0].id).toBe(soon.body.id);
+
+    const isolatedSoon = await request(app.getHttpServer())
+      .get('/api/v1/notifications?type=SUBSCRIPTION_ENDING_SOON')
+      .set('Authorization', `Bearer ${tokenB}`)
+      .expect(200);
+    expect(isolatedSoon.body.total).toBe(0);
   });
 });

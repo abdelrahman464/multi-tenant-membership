@@ -8,6 +8,7 @@ export const MEMBER_CSV_HEADERS = [
   'email',
   'status',
   'homeBranch',
+  'lastCheckedInAt',
   'plans',
   'notes',
   'createdAt',

@@ -16,15 +16,15 @@ import { ParseUuidPipe } from '../../common/pipes/parse-uuid.pipe';
 import { AuthenticatedUser } from '../../common/types/authenticated-user.type';
 import { AuditAction } from '../audit/enums/audit-action.enum';
 import { StaffRole } from '../staff/enums/staff-role.enum';
+import { BranchesService } from './branches.service';
 import { CreateBranchDto } from './dto/create-branch.dto';
 import { ListBranchesQueryDto } from './dto/list-branches-query.dto';
 import { UpdateBranchDto } from './dto/update-branch.dto';
-import { TenantsService } from './tenants.service';
 
-/** Staff list/create/update. Cannot live on TenantsController (that class is platform-key + @Public). */
+/** Staff list/create/update. Platform create stays on PlatformBranchesController. */
 @Controller('branches')
-export class TenantBranchesController {
-  constructor(private readonly tenantsService: TenantsService) {}
+export class BranchesController {
+  constructor(private readonly branchesService: BranchesService) {}
 
   @Get()
   @Roles(StaffRole.TENANT_OWNER, StaffRole.ADMIN)
@@ -32,7 +32,7 @@ export class TenantBranchesController {
     @GetAuthUser() actor: AuthenticatedUser,
     @Query() query: ListBranchesQueryDto,
   ) {
-    return this.tenantsService.listBranches(actor.tenantId, query);
+    return this.branchesService.list(actor.tenantId, query);
   }
 
   @Post()
@@ -43,7 +43,7 @@ export class TenantBranchesController {
     @GetAuthUser() actor: AuthenticatedUser,
     @Body() dto: CreateBranchDto,
   ) {
-    return this.tenantsService.createBranch(actor.tenantId, dto);
+    return this.branchesService.create(actor.tenantId, dto);
   }
 
   @Get(':id')
@@ -52,7 +52,7 @@ export class TenantBranchesController {
     @GetAuthUser() actor: AuthenticatedUser,
     @Param('id', ParseUuidPipe) id: string,
   ) {
-    return this.tenantsService.getBranch(actor.tenantId, id);
+    return this.branchesService.getById(actor.tenantId, id);
   }
 
   @Patch(':id')
@@ -63,6 +63,6 @@ export class TenantBranchesController {
     @Param('id', ParseUuidPipe) id: string,
     @Body() dto: UpdateBranchDto,
   ) {
-    return this.tenantsService.updateBranch(actor.tenantId, id, dto);
+    return this.branchesService.update(actor.tenantId, id, dto);
   }
 }

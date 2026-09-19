@@ -7,6 +7,7 @@ export function memberCsvRow(row: {
   email: string | null;
   status: string;
   notes: string | null;
+  lastCheckedInAt: Date | null;
   createdAt: Date;
   homeBranch: { name: string };
   subscriptions: { planName: string }[];
@@ -21,6 +22,7 @@ export function memberCsvRow(row: {
     row.email,
     row.status,
     row.homeBranch.name,
+    row.lastCheckedInAt,
     plans || null,
     row.notes,
     row.createdAt,

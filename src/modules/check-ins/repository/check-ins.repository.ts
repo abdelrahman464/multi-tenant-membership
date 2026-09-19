@@ -22,7 +22,8 @@ import { CreateCheckInDto } from '../dto/create-check-in.dto';
 import { ListCheckInsQueryDto } from '../dto/list-check-ins-query.dto';
 import { toPublicCheckIn } from '../mappers/check-in.mapper';
 import { zonedYmd } from '../utils/tenant-day.util';
-import { requireActiveBranch } from '../../tenants/utils/require-active-branch.util';
+import { assertBranchOpen } from '../../branches/utils/assert-branch-open.util';
+import { requireActiveBranch } from '../../branches/utils/require-active-branch.util';
 
 type DoorSubscription = Prisma.SubscriptionGetPayload<{
   include: {
@@ -112,22 +113,6 @@ export class CheckInsRepository {
           data.branchId,
         );
 
-        const member = await this.resolveMember(tx, actor.tenantId, data);
-        if (!member) {
-          throw new AppHttpException(
-            HttpStatus.NOT_FOUND,
-            ErrorCode.MEMBER_NOT_FOUND,
-            'Member not found',
-          );
-        }
-        if (member.status === 'ARCHIVED') {
-          throw new AppHttpException(
-            HttpStatus.BAD_REQUEST,
-            ErrorCode.MEMBER_ARCHIVED,
-            'Archived members cannot check in',
-          );
-        }
-
         const tenant = await tx.tenant.findUnique({
           where: { id: actor.tenantId },
           select: {
@@ -144,6 +129,23 @@ export class CheckInsRepository {
         });
         const graceDays = graceDaysFromSettings(tenant?.settings);
         const timeZone = tenant?.timezone ?? 'Africa/Cairo';
+        assertBranchOpen(branch.hours, now, timeZone, branch.hoursExceptions);
+
+        const member = await this.resolveMember(tx, actor.tenantId, data);
+        if (!member) {
+          throw new AppHttpException(
+            HttpStatus.NOT_FOUND,
+            ErrorCode.MEMBER_NOT_FOUND,
+            'Member not found',
+          );
+        }
+        if (member.status === 'ARCHIVED') {
+          throw new AppHttpException(
+            HttpStatus.BAD_REQUEST,
+            ErrorCode.MEMBER_ARCHIVED,
+            'Archived members cannot check in',
+          );
+        }
 
         const candidates = await tx.subscription.findMany({
           where: {
@@ -268,6 +270,11 @@ export class CheckInsRepository {
             checkedInAt: now,
           },
           include: CHECKIN_INCLUDE,
+        });
+
+        await tx.member.update({
+          where: { id: member.id },
+          data: { lastCheckedInAt: now },
         });
 
         return toPublicCheckIn(row, {

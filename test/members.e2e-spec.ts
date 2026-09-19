@@ -114,6 +114,27 @@ describe('Members (e2e)', () => {
     expect(created.body.homeBranchId).toBe(branchA);
     expect(created.body.homeBranch).toEqual({ id: branchA, name: 'Maadi' });
     expect(created.body.status).toBe('ACTIVE');
+    expect(created.body.lastCheckedInAt).toBeNull();
+
+    const neverVisited = await request(app.getHttpServer())
+      .get('/api/v1/members?neverVisited=true')
+      .set('Authorization', `Bearer ${tokenA}`)
+      .expect(200);
+    expect(
+      neverVisited.body.data.some(
+        (row: { id: string }) => row.id === created.body.id,
+      ),
+    ).toBe(true);
+
+    const inactive = await request(app.getHttpServer())
+      .get('/api/v1/members?inactiveDays=7')
+      .set('Authorization', `Bearer ${tokenA}`)
+      .expect(200);
+    expect(
+      inactive.body.data.some(
+        (row: { id: string }) => row.id === created.body.id,
+      ),
+    ).toBe(true);
 
     const byCode = await request(app.getHttpServer())
       .get(`/api/v1/members?code=${created.body.code.toLowerCase()}`)

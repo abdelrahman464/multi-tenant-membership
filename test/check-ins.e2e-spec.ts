@@ -5,6 +5,7 @@ import { ErrorCode } from '../src/common/constants/error-codes';
 import { PrismaService } from '../src/database/prisma.service';
 import { RedisService } from '../src/redis/redis.service';
 import { addUtcDays } from '../src/modules/subscriptions/utils/freeze.util';
+import { zonedYmd } from '../src/modules/check-ins/utils/tenant-day.util';
 import { createTestApp } from './helpers/create-test-app';
 
 const platformKey = process.env.PLATFORM_API_KEY ?? 'test-platform-key';
@@ -146,6 +147,25 @@ describe('Check-ins (e2e)', () => {
       status: 'ACTIVE',
     });
     expect(first.body.branch).toEqual({ id: branchId, name: 'Maadi' });
+
+    const afterVisit = await request(app.getHttpServer())
+      .get(`/api/v1/members/${member.body.id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+    expect(afterVisit.body.lastCheckedInAt).toEqual(expect.any(String));
+    expect(new Date(afterVisit.body.lastCheckedInAt).getTime()).toBe(
+      new Date(first.body.checkedInAt).getTime(),
+    );
+
+    const stillAway = await request(app.getHttpServer())
+      .get('/api/v1/members?neverVisited=true')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+    expect(
+      stillAway.body.data.some(
+        (row: { id: string }) => row.id === member.body.id,
+      ),
+    ).toBe(false);
     expect(first.body.staff).toEqual({
       id: login.body.staff.id,
       name: 'Owner',
@@ -535,5 +555,72 @@ describe('Check-ins (e2e)', () => {
       })
       .expect(201);
     expect(freeVisit.body.status).toBe('ACTIVE');
+
+    const closedWeek = {
+      sunday: null,
+      monday: null,
+      tuesday: null,
+      wednesday: null,
+      thursday: null,
+      friday: null,
+      saturday: null,
+    };
+    await request(app.getHttpServer())
+      .patch(`/api/v1/branches/${branchId}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ hours: closedWeek })
+      .expect(200);
+
+    const afterHours = await request(app.getHttpServer())
+      .post('/api/v1/checkIns')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        memberId: member.body.id,
+        branchId,
+        subscriptionId: comp.body.id,
+      })
+      .expect(400);
+    expect(afterHours.body.code).toBe(ErrorCode.BRANCH_CLOSED);
+
+    await request(app.getHttpServer())
+      .post('/api/v1/payments')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        subscriptionId: paid.body.id,
+        branchId,
+        method: 'CASH',
+        amount: 50,
+      })
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .patch(`/api/v1/branches/${branchId}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ hours: null })
+      .expect(200);
+
+    const today = zonedYmd(new Date(), 'Africa/Cairo');
+    await request(app.getHttpServer())
+      .patch(`/api/v1/branches/${branchId}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ hoursExceptions: [{ date: today, hours: null }] })
+      .expect(200);
+
+    const holiday = await request(app.getHttpServer())
+      .post('/api/v1/checkIns')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        memberId: member.body.id,
+        branchId,
+        subscriptionId: comp.body.id,
+      })
+      .expect(400);
+    expect(holiday.body.code).toBe(ErrorCode.BRANCH_CLOSED);
+
+    await request(app.getHttpServer())
+      .patch(`/api/v1/branches/${branchId}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ hoursExceptions: null })
+      .expect(200);
   });
 });

@@ -48,4 +48,9 @@ export class ExportSubscriptionsQueryDto {
   @Transform(toQueryBoolean)
   @IsBoolean()
   expired?: boolean;
+
+  @IsOptional()
+  @Transform(toQueryBoolean)
+  @IsBoolean()
+  endingSoon?: boolean;
 }
