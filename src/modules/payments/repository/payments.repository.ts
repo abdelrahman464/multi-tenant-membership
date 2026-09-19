@@ -5,6 +5,7 @@ import { AppHttpException } from '../../../common/errors/app-http.exception';
 import { AuthenticatedUser } from '../../../common/types/authenticated-user.type';
 import { ApiFeatures } from '../../../common/utils/api-features.utils';
 import { PrismaService } from '../../../database/prisma.service';
+import { requireActiveBranch } from '../../tenants/utils/require-active-branch.util';
 import { StaffRole } from '../../staff/enums/staff-role.enum';
 import {
   PAYMENT_FILTER_FIELDS,
@@ -97,17 +98,7 @@ export class PaymentsRepository {
         );
       }
 
-      const branch = await tx.branch.findFirst({
-        where: { id: data.branchId, tenantId: actor.tenantId },
-        select: { id: true },
-      });
-      if (!branch) {
-        throw new AppHttpException(
-          HttpStatus.NOT_FOUND,
-          ErrorCode.BRANCH_NOT_FOUND,
-          'Branch not found',
-        );
-      }
+      await requireActiveBranch(tx, actor.tenantId, data.branchId);
 
       const subscription = await tx.subscription.findFirst({
         where: { id: data.subscriptionId, tenantId: actor.tenantId },

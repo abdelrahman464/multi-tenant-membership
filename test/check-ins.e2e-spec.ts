@@ -121,10 +121,17 @@ describe('Check-ins (e2e)', () => {
       .send({ memberId: member.body.id, planId: plan.body.id })
       .expect(201);
 
+    const missingWho = await request(app.getHttpServer())
+      .post('/api/v1/checkIns')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ branchId })
+      .expect(400);
+    expect(missingWho.body.code).toBe(ErrorCode.MEMBER_LOOKUP_REQUIRED);
+
     const first = await request(app.getHttpServer())
       .post('/api/v1/checkIns')
       .set('Authorization', `Bearer ${token}`)
-      .send({ memberId: member.body.id, branchId })
+      .send({ memberCode: member.body.code.toLowerCase(), branchId })
       .expect(201);
     expect(first.body.status).toBe('ACTIVE');
     expect(first.body.usedGrace).toBe(false);
@@ -190,6 +197,60 @@ describe('Check-ins (e2e)', () => {
       })
       .expect(400);
     expect(wrongBranch.body.code).toBe(ErrorCode.CHECKIN_BRANCH_NOT_ALLOWED);
+
+    const blockedInbox = await request(app.getHttpServer())
+      .get('/api/v1/notifications?type=CHECKIN_BRANCH_BLOCKED')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+    expect(blockedInbox.body.total).toBe(1);
+    expect(blockedInbox.body.data[0]).toEqual(
+      expect.objectContaining({
+        type: 'CHECKIN_BRANCH_BLOCKED',
+        subscriptionId: otherPlan.body.id,
+        memberId: member.body.id,
+        memberName: 'Ahmed Hassan',
+        planName: 'Maadi only',
+        branchName: 'Nasr City',
+        unread: true,
+        message: "Ahmed Hassan's Maadi only is not allowed at Nasr City",
+      }),
+    );
+
+    await request(app.getHttpServer())
+      .post('/api/v1/checkIns')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        memberId: member.body.id,
+        branchId: second.body.id,
+        subscriptionId: otherPlan.body.id,
+      })
+      .expect(400);
+
+    const blockedInboxAgain = await request(app.getHttpServer())
+      .get('/api/v1/notifications?type=CHECKIN_BRANCH_BLOCKED')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+    expect(blockedInboxAgain.body.total).toBe(1);
+
+    const blockedAudit = await request(app.getHttpServer())
+      .get('/api/v1/audit?action=CHECK_IN_BLOCKED')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+    expect(blockedAudit.body.total).toBe(2);
+    expect(blockedAudit.body.data[0]).toEqual(
+      expect.objectContaining({
+        action: 'CHECK_IN_BLOCKED',
+        entityType: 'subscription',
+        entityId: otherPlan.body.id,
+        metadata: expect.objectContaining({
+          reason: ErrorCode.CHECKIN_BRANCH_NOT_ALLOWED,
+          memberId: member.body.id,
+          branchId: second.body.id,
+          branchName: 'Nasr City',
+          planName: 'Maadi only',
+        }),
+      }),
+    );
 
     await request(app.getHttpServer())
       .patch('/api/v1/settings')

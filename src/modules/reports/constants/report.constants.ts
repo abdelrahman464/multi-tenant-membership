@@ -3,6 +3,7 @@ export const REPORT_MAX_ROWS = 10_000;
 
 export const MEMBER_CSV_HEADERS = [
   'member',
+  'code',
   'phone',
   'email',
   'status',

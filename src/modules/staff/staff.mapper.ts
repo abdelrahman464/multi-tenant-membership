@@ -1,4 +1,4 @@
-import { Staff, StaffRole } from '@prisma/client';
+import { Staff, StaffRole, StaffStatus } from '@prisma/client';
 
 export type PublicBranchRef = {
   id: string;
@@ -11,6 +11,7 @@ export type PublicStaff = {
   name: string;
   email: string;
   role: StaffRole;
+  status: StaffStatus;
   branchId: string | null;
   branch: PublicBranchRef | null;
   createdAt: Date;
@@ -25,6 +26,7 @@ export function toPublicStaff(
     | 'name'
     | 'email'
     | 'role'
+    | 'status'
     | 'branchId'
     | 'createdAt'
     | 'updatedAt'
@@ -36,6 +38,7 @@ export function toPublicStaff(
     name: staff.name,
     email: staff.email,
     role: staff.role,
+    status: staff.status,
     branchId: staff.branchId,
     branch: staff.branch ?? null,
     createdAt: staff.createdAt,

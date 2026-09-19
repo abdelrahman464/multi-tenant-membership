@@ -4,6 +4,7 @@ import { ErrorCode } from '../../../common/constants/error-codes';
 import { AppHttpException } from '../../../common/errors/app-http.exception';
 import { ApiFeatures } from '../../../common/utils/api-features.utils';
 import { PrismaService } from '../../../database/prisma.service';
+import { requireActiveBranch } from '../../tenants/utils/require-active-branch.util';
 import {
   MEMBER_FILTER_FIELDS,
   MEMBER_PUBLIC_SELECT,
@@ -13,6 +14,7 @@ import {
 import { ListMembersQueryDto } from '../dto/list-members-query.dto';
 import { CreateMemberDto } from '../dto/create-member.dto';
 import { UpdateMemberDto } from '../dto/update-member.dto';
+import { generateMemberCode } from '../utils/member-code.util';
 
 @Injectable()
 export class MembersRepository {
@@ -60,17 +62,28 @@ export class MembersRepository {
   async create(tenantId: string, data: CreateMemberDto) {
     return this.prisma.withTenant(tenantId, async (tx) => {
       await this.assertHomeBranch(tx, tenantId, data.homeBranchId);
-      return tx.member.create({
-        data: {
-          tenantId,
-          name: data.name,
-          phone: data.phone,
-          email: data.email,
-          homeBranchId: data.homeBranchId,
-          notes: data.notes,
-        },
-        select: MEMBER_PUBLIC_SELECT,
-      });
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        try {
+          return await tx.member.create({
+            data: {
+              tenantId,
+              name: data.name,
+              phone: data.phone,
+              email: data.email,
+              homeBranchId: data.homeBranchId,
+              notes: data.notes,
+              code: generateMemberCode(),
+            },
+            select: MEMBER_PUBLIC_SELECT,
+          });
+        } catch (error) {
+          if (uniqueTargetIncludes(error, 'code') && attempt < 4) {
+            continue;
+          }
+          throw error;
+        }
+      }
+      throw new Error('Could not allocate a unique member code');
     });
   }
 
@@ -95,12 +108,7 @@ export class MembersRepository {
   }
 
   isUniqueConflict(error: unknown): boolean {
-    return (
-      typeof error === 'object' &&
-      error !== null &&
-      'code' in error &&
-      (error as { code: string }).code === 'P2002'
-    );
+    return isPrismaUniqueConflict(error);
   }
 
   phoneTakenError(): AppHttpException {
@@ -116,15 +124,35 @@ export class MembersRepository {
     tenantId: string,
     homeBranchId: string,
   ): Promise<void> {
-    const branch = await tx.branch.findFirst({
-      where: { id: homeBranchId, tenantId },
-    });
-    if (!branch) {
-      throw new AppHttpException(
-        HttpStatus.NOT_FOUND,
-        ErrorCode.BRANCH_NOT_FOUND,
-        'Branch not found',
-      );
-    }
+    await requireActiveBranch(tx, tenantId, homeBranchId);
   }
+}
+
+function isPrismaUniqueConflict(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    (error as { code: string }).code === 'P2002'
+  );
+}
+
+function uniqueTargetIncludes(error: unknown, field: string): boolean {
+  if (!isPrismaUniqueConflict(error)) {
+    return false;
+  }
+  const meta = (error as { meta?: Record<string, unknown> }).meta;
+  const target = meta?.target;
+  if (Array.isArray(target) && target.includes(field)) {
+    return true;
+  }
+  if (target === field) {
+    return true;
+  }
+  const adapter = meta?.driverAdapterError as
+    { cause?: { originalMessage?: string; constraint?: string } } | undefined;
+  const hint = [adapter?.cause?.originalMessage, adapter?.cause?.constraint]
+    .filter(Boolean)
+    .join(' ');
+  return hint.includes(field);
 }

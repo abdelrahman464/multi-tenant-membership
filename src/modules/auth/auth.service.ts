@@ -25,6 +25,7 @@ type StaffWithPassword = {
   branchId: string | null;
   branch: PublicBranchRef | null;
   sessionVersion: number;
+  status: import('@prisma/client').StaffStatus;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -64,6 +65,8 @@ export class AuthService {
     if (!valid) {
       throw this.invalidCredentials();
     }
+
+    this.assertStaffActive(staff.status);
 
     return this.signIn(staff, req, res);
   }
@@ -138,6 +141,8 @@ export class AuthService {
         'This tenant is suspended',
       );
     }
+
+    this.assertStaffActive(staff.status);
 
     this.assertSessionVersion(staff.sessionVersion, decoded.sv);
 
@@ -292,6 +297,18 @@ export class AuthService {
         HttpStatus.UNAUTHORIZED,
         ErrorCode.SESSION_REVOKED,
         'Session has been revoked. Please log in again',
+      );
+    }
+  }
+
+  private assertStaffActive(
+    status: import('@prisma/client').StaffStatus,
+  ): void {
+    if (status === 'ARCHIVED') {
+      throw new AppHttpException(
+        HttpStatus.FORBIDDEN,
+        ErrorCode.STAFF_ARCHIVED,
+        'This staff account is archived',
       );
     }
   }

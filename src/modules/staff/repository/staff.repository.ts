@@ -4,6 +4,7 @@ import { ErrorCode } from '../../../common/constants/error-codes';
 import { AppHttpException } from '../../../common/errors/app-http.exception';
 import { ApiFeatures } from '../../../common/utils/api-features.utils';
 import { PrismaService } from '../../../database/prisma.service';
+import { requireActiveBranch } from '../../tenants/utils/require-active-branch.util';
 import { SESSION_TENANT_SELECT } from '../../tenants/constants/tenant.constants';
 import {
   STAFF_FILTER_FIELDS,
@@ -13,6 +14,8 @@ import {
 } from '../constants/staff.constants';
 import { CreateStaffDto } from '../dto/create-staff.dto';
 import { ListStaffQueryDto } from '../dto/list-staff-query.dto';
+import { StaffStatus } from '../enums/staff-status.enum';
+import { AssignableStaffRole } from '../enums/staff-role.enum';
 
 @Injectable()
 export class StaffRepository {
@@ -100,16 +103,7 @@ export class StaffRepository {
   async create(tenantId: string, data: CreateStaffDto) {
     return this.prisma.withTenant(tenantId, async (tx) => {
       if (data.branchId) {
-        const branch = await tx.branch.findFirst({
-          where: { id: data.branchId, tenantId },
-        });
-        if (!branch) {
-          throw new AppHttpException(
-            HttpStatus.NOT_FOUND,
-            ErrorCode.BRANCH_NOT_FOUND,
-            'Branch not found',
-          );
-        }
+        await requireActiveBranch(tx, tenantId, data.branchId);
       }
 
       return tx.staff.create({
@@ -120,6 +114,51 @@ export class StaffRepository {
           password: data.password,
           role: data.role,
           branchId: data.branchId ?? null,
+        },
+        select: STAFF_PUBLIC_SELECT,
+      });
+    });
+  }
+
+  findPublicById(tenantId: string, id: string) {
+    return this.prisma.withTenant(tenantId, (tx) =>
+      tx.staff.findFirst({
+        where: { id, tenantId },
+        select: STAFF_PUBLIC_SELECT,
+      }),
+    );
+  }
+
+  async update(
+    tenantId: string,
+    id: string,
+    data: {
+      name?: string;
+      email?: string;
+      password?: string;
+      role?: AssignableStaffRole;
+      branchId?: string | null;
+      status?: StaffStatus;
+      bumpSessionVersion: boolean;
+    },
+  ) {
+    return this.prisma.withTenant(tenantId, async (tx) => {
+      if (data.branchId) {
+        await requireActiveBranch(tx, tenantId, data.branchId);
+      }
+
+      return tx.staff.update({
+        where: { id },
+        data: {
+          ...(data.name !== undefined ? { name: data.name } : {}),
+          ...(data.email !== undefined ? { email: data.email } : {}),
+          ...(data.password !== undefined ? { password: data.password } : {}),
+          ...(data.role !== undefined ? { role: data.role } : {}),
+          ...(data.branchId !== undefined ? { branchId: data.branchId } : {}),
+          ...(data.status !== undefined ? { status: data.status } : {}),
+          ...(data.bumpSessionVersion
+            ? { sessionVersion: { increment: 1 } }
+            : {}),
         },
         select: STAFF_PUBLIC_SELECT,
       });

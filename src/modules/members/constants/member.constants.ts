@@ -3,6 +3,7 @@ export const MEMBER_PUBLIC_SELECT = {
   tenantId: true,
   homeBranchId: true,
   name: true,
+  code: true,
   phone: true,
   email: true,
   notes: true,
@@ -12,8 +13,8 @@ export const MEMBER_PUBLIC_SELECT = {
   homeBranch: { select: { id: true, name: true } },
 } as const;
 
-export const MEMBER_SEARCH_FIELDS = ['name', 'phone', 'email'] as const;
-export const MEMBER_FILTER_FIELDS = ['status', 'homeBranchId'] as const;
+export const MEMBER_SEARCH_FIELDS = ['name', 'phone', 'email', 'code'] as const;
+export const MEMBER_FILTER_FIELDS = ['status', 'homeBranchId', 'code'] as const;
 export const MEMBER_SORT_FIELDS = [
   'createdAt',
   'updatedAt',

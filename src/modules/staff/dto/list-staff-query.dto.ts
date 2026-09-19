@@ -9,6 +9,7 @@ import {
   Min,
 } from 'class-validator';
 import { StaffRole } from '../enums/staff-role.enum';
+import { StaffStatus } from '../enums/staff-status.enum';
 
 export class ListStaffQueryDto {
   @IsOptional()
@@ -22,6 +23,10 @@ export class ListStaffQueryDto {
   @IsOptional()
   @IsUUID()
   branchId?: string;
+
+  @IsOptional()
+  @IsEnum(StaffStatus)
+  status?: StaffStatus;
 
   @IsOptional()
   @IsString()

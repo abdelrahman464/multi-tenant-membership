@@ -2,7 +2,7 @@
   "name": "membership-api",
   "version": "0.1.0",
   "private": true,
-  "description": "Staff-facing multi-tenant membership API. Phase 18: cancel a sold plan.",
+  "description": "Staff-facing multi-tenant membership API. Phase 22: gym-owned branches.",
   "engines": {
     "node": ">=22.12.0"
   },

@@ -55,6 +55,14 @@ export class JwtAuthGuard implements CanActivate {
       );
     }
 
+    if (staff.status === 'ARCHIVED') {
+      throw new AppHttpException(
+        HttpStatus.FORBIDDEN,
+        ErrorCode.STAFF_ARCHIVED,
+        'This staff account is archived',
+      );
+    }
+
     const tokenSv = decoded.sv ?? 0;
     if (tokenSv !== staff.sessionVersion) {
       throw new AppHttpException(

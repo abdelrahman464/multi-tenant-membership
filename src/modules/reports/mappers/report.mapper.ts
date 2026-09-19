@@ -2,6 +2,7 @@ import { roundMoney } from '../../payments/mappers/payment.mapper';
 
 export function memberCsvRow(row: {
   name: string;
+  code: string;
   phone: string;
   email: string | null;
   status: string;
@@ -15,6 +16,7 @@ export function memberCsvRow(row: {
   ].join('; ');
   return [
     row.name,
+    row.code,
     row.phone,
     row.email,
     row.status,

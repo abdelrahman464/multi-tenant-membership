@@ -56,6 +56,7 @@ export class ReportsRepository {
         take: REPORT_MAX_ROWS,
         select: {
           name: true,
+          code: true,
           phone: true,
           email: true,
           status: true,

@@ -1,19 +1,29 @@
-import { Type } from 'class-transformer';
+import { Type, Transform } from 'class-transformer';
 import {
   IsEnum,
   IsInt,
   IsOptional,
   IsString,
   IsUUID,
+  Length,
+  Matches,
   Max,
   Min,
 } from 'class-validator';
 import { MemberStatus } from '../enums/member-status.enum';
+import { normalizeMemberCode } from '../utils/member-code.util';
 
 export class ListMembersQueryDto {
   @IsOptional()
   @IsString()
   search?: string;
+
+  @IsOptional()
+  @Transform(({ value }) => normalizeMemberCode(value))
+  @IsString()
+  @Length(8, 8)
+  @Matches(/^[2-9A-HJ-NP-Z]{8}$/)
+  code?: string;
 
   @IsOptional()
   @IsEnum(MemberStatus)

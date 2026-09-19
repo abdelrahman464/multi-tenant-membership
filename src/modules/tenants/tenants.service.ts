@@ -9,6 +9,7 @@ import { CreateBranchDto } from './dto/create-branch.dto';
 import { CreateTenantDto } from './dto/create-tenant.dto';
 import { ListBranchesQueryDto } from './dto/list-branches-query.dto';
 import { ListTenantsQueryDto } from './dto/list-tenants-query.dto';
+import { UpdateBranchDto } from './dto/update-branch.dto';
 import { UpdateTenantDto } from './dto/update-tenant.dto';
 import { UpdateTenantSettingsDto } from './dto/update-tenant-settings.dto';
 import { HashService } from '../../common/security/hash.service';
@@ -173,6 +174,68 @@ export class TenantsService {
 
   listBranches(tenantId: string, query: ListBranchesQueryDto) {
     return this.tenantsRepository.findBranchesByTenant(tenantId, query);
+  }
+
+  async getBranch(tenantId: string, id: string) {
+    const branch = await this.tenantsRepository.findBranchById(tenantId, id);
+    if (!branch) {
+      throw new AppHttpException(
+        HttpStatus.NOT_FOUND,
+        ErrorCode.BRANCH_NOT_FOUND,
+        'Branch not found',
+      );
+    }
+    return branch;
+  }
+
+  async createBranch(tenantId: string, dto: CreateBranchDto) {
+    try {
+      return await this.tenantsRepository.createBranch(
+        tenantId,
+        dto.name.trim(),
+      );
+    } catch (error) {
+      if (this.tenantsRepository.isUniqueConflict(error)) {
+        throw this.tenantsRepository.branchNameTakenError();
+      }
+      throw error;
+    }
+  }
+
+  async updateBranch(tenantId: string, id: string, dto: UpdateBranchDto) {
+    const branch = await this.getBranch(tenantId, id);
+    if (dto.status === 'ARCHIVED' && branch.status !== 'ARCHIVED') {
+      const [activeCount, staffCount] = await Promise.all([
+        this.tenantsRepository.countActiveBranches(tenantId),
+        this.tenantsRepository.countActiveStaffOnBranch(tenantId, id),
+      ]);
+      if (activeCount <= 1) {
+        throw new AppHttpException(
+          HttpStatus.BAD_REQUEST,
+          ErrorCode.BRANCH_LAST_ACTIVE,
+          'A gym must keep at least one active branch',
+        );
+      }
+      if (staffCount > 0) {
+        throw new AppHttpException(
+          HttpStatus.BAD_REQUEST,
+          ErrorCode.BRANCH_HAS_STAFF,
+          'Reassign active branch staff before archiving this location',
+        );
+      }
+    }
+
+    try {
+      return await this.tenantsRepository.updateBranch(tenantId, id, {
+        ...(dto.name !== undefined ? { name: dto.name.trim() } : {}),
+        ...(dto.status !== undefined ? { status: dto.status } : {}),
+      });
+    } catch (error) {
+      if (this.tenantsRepository.isUniqueConflict(error)) {
+        throw this.tenantsRepository.branchNameTakenError();
+      }
+      throw error;
+    }
   }
 
   async addBranch(tenantId: string, dto: CreateBranchDto) {

@@ -85,7 +85,7 @@ export class DashboardRepository {
         }),
         tx.branch.findMany({
           where: { tenantId },
-          select: { id: true, name: true },
+          select: { id: true, name: true, status: true },
           orderBy: { name: 'asc' },
         }),
         tx.payment.groupBy({
@@ -146,6 +146,7 @@ export class DashboardRepository {
           byBranch: branches.map((branch) => ({
             id: branch.id,
             name: branch.name,
+            status: branch.status,
             count: branchCount.get(branch.id) ?? 0,
           })),
         },

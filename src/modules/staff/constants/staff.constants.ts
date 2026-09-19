@@ -4,6 +4,7 @@ export const STAFF_PUBLIC_SELECT = {
   name: true,
   email: true,
   role: true,
+  status: true,
   branchId: true,
   createdAt: true,
   updatedAt: true,
@@ -11,7 +12,7 @@ export const STAFF_PUBLIC_SELECT = {
 } as const;
 
 export const STAFF_SEARCH_FIELDS = ['name', 'email'] as const;
-export const STAFF_FILTER_FIELDS = ['role', 'branchId'] as const;
+export const STAFF_FILTER_FIELDS = ['role', 'branchId', 'status'] as const;
 export const STAFF_SORT_FIELDS = [
   'createdAt',
   'updatedAt',

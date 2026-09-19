@@ -209,13 +209,20 @@ export class PlansRepository {
     const uniqueIds = [...new Set(branchIds)];
     const found = await tx.branch.findMany({
       where: { id: { in: uniqueIds }, tenantId },
-      select: { id: true },
+      select: { id: true, status: true },
     });
     if (found.length !== uniqueIds.length) {
       throw new AppHttpException(
         HttpStatus.NOT_FOUND,
         ErrorCode.BRANCH_NOT_FOUND,
         'Branch not found',
+      );
+    }
+    if (found.some((row) => row.status === 'ARCHIVED')) {
+      throw new AppHttpException(
+        HttpStatus.BAD_REQUEST,
+        ErrorCode.BRANCH_ARCHIVED,
+        'This branch is archived',
       );
     }
   }

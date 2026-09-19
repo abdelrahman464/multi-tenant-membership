@@ -15,6 +15,7 @@ export class CheckInsService {
   create(actor: AuthenticatedUser, dto: CreateCheckInDto) {
     return this.checkInsRepository.create(actor, {
       memberId: dto.memberId,
+      memberCode: dto.memberCode,
       branchId: dto.branchId,
       subscriptionId: dto.subscriptionId,
     });

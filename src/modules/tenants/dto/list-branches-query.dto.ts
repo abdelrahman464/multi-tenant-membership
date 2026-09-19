@@ -1,10 +1,15 @@
 import { Type } from 'class-transformer';
-import { IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { IsEnum, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { BranchStatus } from '../enums/branch-status.enum';
 
 export class ListBranchesQueryDto {
   @IsOptional()
   @IsString()
   search?: string;
+
+  @IsOptional()
+  @IsEnum(BranchStatus)
+  status?: BranchStatus;
 
   /** Comma list. Prefix `-` for desc: `-createdAt,name` */
   @IsOptional()

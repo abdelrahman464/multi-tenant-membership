@@ -1,0 +1,5 @@
+ALTER TABLE "notifications" ADD COLUMN "branch_name" TEXT;
+
+ALTER TYPE "NotificationType" ADD VALUE 'CHECKIN_BRANCH_BLOCKED';
+
+ALTER TYPE "AuditAction" ADD VALUE 'CHECK_IN_BLOCKED';

@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { Prisma, PaymentStatus } from '@prisma/client';
 import { ErrorCode } from '../../../common/constants/error-codes';
@@ -21,6 +22,7 @@ import { CreateCheckInDto } from '../dto/create-check-in.dto';
 import { ListCheckInsQueryDto } from '../dto/list-check-ins-query.dto';
 import { toPublicCheckIn } from '../mappers/check-in.mapper';
 import { zonedYmd } from '../utils/tenant-day.util';
+import { requireActiveBranch } from '../../tenants/utils/require-active-branch.util';
 
 type DoorSubscription = Prisma.SubscriptionGetPayload<{
   include: {
@@ -33,6 +35,12 @@ type DoorPaymentGate = {
   required: boolean;
   minPercent: number;
   paidBySubscription: Map<string, number>;
+};
+
+type PersistedDoorBlock = {
+  doorBlocked: true;
+  code: ErrorCode;
+  minPercent: number;
 };
 
 @Injectable()
@@ -82,186 +90,233 @@ export class CheckInsRepository {
   }
 
   create(actor: AuthenticatedUser, data: CreateCheckInDto) {
-    return this.prisma.withTenant(actor.tenantId, async (tx) => {
-      const now = new Date();
-      await this.subscriptionsRepository.settleInTx(tx, actor.tenantId);
+    return this.prisma
+      .withTenant(actor.tenantId, async (tx) => {
+        const now = new Date();
+        await this.subscriptionsRepository.settleInTx(tx, actor.tenantId);
 
-      if (
-        actor.role === StaffRole.BRANCH_STAFF &&
-        actor.branchId !== data.branchId
-      ) {
-        throw new AppHttpException(
-          HttpStatus.FORBIDDEN,
-          ErrorCode.BRANCH_NOT_ALLOWED,
-          'Branch staff can only check in at their assigned branch',
+        if (
+          actor.role === StaffRole.BRANCH_STAFF &&
+          actor.branchId !== data.branchId
+        ) {
+          throw new AppHttpException(
+            HttpStatus.FORBIDDEN,
+            ErrorCode.BRANCH_NOT_ALLOWED,
+            'Branch staff can only check in at their assigned branch',
+          );
+        }
+
+        const branch = await requireActiveBranch(
+          tx,
+          actor.tenantId,
+          data.branchId,
         );
-      }
 
-      const branch = await tx.branch.findFirst({
-        where: { id: data.branchId, tenantId: actor.tenantId },
-        select: { id: true },
+        const member = await this.resolveMember(tx, actor.tenantId, data);
+        if (!member) {
+          throw new AppHttpException(
+            HttpStatus.NOT_FOUND,
+            ErrorCode.MEMBER_NOT_FOUND,
+            'Member not found',
+          );
+        }
+        if (member.status === 'ARCHIVED') {
+          throw new AppHttpException(
+            HttpStatus.BAD_REQUEST,
+            ErrorCode.MEMBER_ARCHIVED,
+            'Archived members cannot check in',
+          );
+        }
+
+        const tenant = await tx.tenant.findUnique({
+          where: { id: actor.tenantId },
+          select: {
+            timezone: true,
+            settings: {
+              select: {
+                graceEnabled: true,
+                graceDays: true,
+                requirePaymentForAccess: true,
+                minPaidPercentForAccess: true,
+              },
+            },
+          },
+        });
+        const graceDays = graceDaysFromSettings(tenant?.settings);
+        const timeZone = tenant?.timezone ?? 'Africa/Cairo';
+
+        const candidates = await tx.subscription.findMany({
+          where: {
+            tenantId: actor.tenantId,
+            memberId: member.id,
+            ...(data.subscriptionId ? { id: data.subscriptionId } : {}),
+          },
+          include: {
+            member: { select: { name: true } },
+            plan: { select: { branches: { select: { branchId: true } } } },
+          },
+        });
+
+        if (data.subscriptionId && candidates.length === 0) {
+          throw new AppHttpException(
+            HttpStatus.NOT_FOUND,
+            ErrorCode.SUBSCRIPTION_NOT_FOUND,
+            'Subscription not found',
+          );
+        }
+
+        const paymentGate: DoorPaymentGate = {
+          required: tenant?.settings?.requirePaymentForAccess === true,
+          minPercent: tenant?.settings?.minPaidPercentForAccess ?? 50,
+          paidBySubscription: await this.paidTotals(
+            tx,
+            actor.tenantId,
+            candidates.map((row) => row.id),
+          ),
+        };
+
+        const persistedBlock = await this.persistBranchBlockIfNeeded(
+          tx,
+          actor,
+          data,
+          candidates,
+          branch,
+          now,
+          graceDays,
+          paymentGate,
+        );
+        if (persistedBlock) {
+          return persistedBlock;
+        }
+
+        const subscription = data.subscriptionId
+          ? this.assertDoorAccess(
+              candidates[0],
+              data.branchId,
+              now,
+              graceDays,
+              paymentGate,
+            )
+          : this.pickDoorSubscription(
+              candidates,
+              data.branchId,
+              now,
+              graceDays,
+              paymentGate,
+            );
+
+        const visitsToday = await this.countVisitsToday(
+          tx,
+          actor.tenantId,
+          subscription.id,
+          now,
+          timeZone,
+        );
+        if (visitsToday >= subscription.maxVisitsPerDay) {
+          throw new AppHttpException(
+            HttpStatus.BAD_REQUEST,
+            ErrorCode.CHECKIN_DAILY_LIMIT,
+            'Daily visit limit reached',
+          );
+        }
+
+        let usedGrace = false;
+        let status = subscription.status;
+        let sessionsRemaining = subscription.sessionsRemaining;
+
+        if (status === 'EXPIRED') {
+          await tx.subscription.update({
+            where: { id: subscription.id },
+            data: {
+              status: 'IN_GRACE',
+              graceUsedAt: now,
+              graceEndsAt: accessUntilOf(subscription.endsAt, graceDays),
+            },
+          });
+          await this.subscriptionsRepository.recordLifecycleNotifications(
+            tx,
+            actor.tenantId,
+            'SUBSCRIPTION_IN_GRACE',
+            [
+              {
+                id: subscription.id,
+                memberId: subscription.memberId,
+                planName: subscription.planName,
+                member: subscription.member,
+              },
+            ],
+          );
+          usedGrace = true;
+          status = 'IN_GRACE';
+        }
+
+        if (sessionsRemaining !== null) {
+          sessionsRemaining = sessionsRemaining - 1;
+          await tx.subscription.update({
+            where: { id: subscription.id },
+            data: { sessionsRemaining },
+          });
+        }
+
+        const row = await tx.checkIn.create({
+          data: {
+            tenantId: actor.tenantId,
+            memberId: member.id,
+            subscriptionId: subscription.id,
+            branchId: data.branchId,
+            staffId: actor.id,
+            checkedInAt: now,
+          },
+          include: CHECKIN_INCLUDE,
+        });
+
+        return toPublicCheckIn(row, {
+          usedGrace,
+          status,
+          sessionsRemaining,
+          visitsToday: visitsToday + 1,
+        });
+      })
+      .then((result) => {
+        if (this.isPersistedDoorBlock(result)) {
+          this.throwDoorAccess(result.code, result.minPercent);
+        }
+        return result;
       });
-      if (!branch) {
-        throw new AppHttpException(
-          HttpStatus.NOT_FOUND,
-          ErrorCode.BRANCH_NOT_FOUND,
-          'Branch not found',
-        );
-      }
+  }
 
-      const member = await tx.member.findFirst({
-        where: { id: data.memberId, tenantId: actor.tenantId },
+  private async resolveMember(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    data: { memberId?: string; memberCode?: string },
+  ) {
+    if (!data.memberId && !data.memberCode) {
+      throw new AppHttpException(
+        HttpStatus.BAD_REQUEST,
+        ErrorCode.MEMBER_LOOKUP_REQUIRED,
+        'Send memberId or memberCode',
+      );
+    }
+    if (data.memberCode) {
+      const byCode = await tx.member.findFirst({
+        where: { tenantId, code: data.memberCode },
         select: { id: true, status: true },
       });
-      if (!member) {
-        throw new AppHttpException(
-          HttpStatus.NOT_FOUND,
-          ErrorCode.MEMBER_NOT_FOUND,
-          'Member not found',
-        );
+      if (!byCode) {
+        return null;
       }
-      if (member.status === 'ARCHIVED') {
+      if (data.memberId && data.memberId !== byCode.id) {
         throw new AppHttpException(
           HttpStatus.BAD_REQUEST,
-          ErrorCode.MEMBER_ARCHIVED,
-          'Archived members cannot check in',
+          ErrorCode.MEMBER_CODE_MISMATCH,
+          'memberId and memberCode do not match',
         );
       }
-
-      const tenant = await tx.tenant.findUnique({
-        where: { id: actor.tenantId },
-        select: {
-          timezone: true,
-          settings: {
-            select: {
-              graceEnabled: true,
-              graceDays: true,
-              requirePaymentForAccess: true,
-              minPaidPercentForAccess: true,
-            },
-          },
-        },
-      });
-      const graceDays = graceDaysFromSettings(tenant?.settings);
-      const timeZone = tenant?.timezone ?? 'Africa/Cairo';
-
-      const candidates = await tx.subscription.findMany({
-        where: {
-          tenantId: actor.tenantId,
-          memberId: data.memberId,
-          ...(data.subscriptionId ? { id: data.subscriptionId } : {}),
-        },
-        include: {
-          member: { select: { name: true } },
-          plan: { select: { branches: { select: { branchId: true } } } },
-        },
-      });
-
-      if (data.subscriptionId && candidates.length === 0) {
-        throw new AppHttpException(
-          HttpStatus.NOT_FOUND,
-          ErrorCode.SUBSCRIPTION_NOT_FOUND,
-          'Subscription not found',
-        );
-      }
-
-      const paymentGate: DoorPaymentGate = {
-        required: tenant?.settings?.requirePaymentForAccess === true,
-        minPercent: tenant?.settings?.minPaidPercentForAccess ?? 50,
-        paidBySubscription: await this.paidTotals(
-          tx,
-          actor.tenantId,
-          candidates.map((row) => row.id),
-        ),
-      };
-
-      const subscription = data.subscriptionId
-        ? this.assertDoorAccess(
-            candidates[0],
-            data.branchId,
-            now,
-            graceDays,
-            paymentGate,
-          )
-        : this.pickDoorSubscription(
-            candidates,
-            data.branchId,
-            now,
-            graceDays,
-            paymentGate,
-          );
-
-      const visitsToday = await this.countVisitsToday(
-        tx,
-        actor.tenantId,
-        subscription.id,
-        now,
-        timeZone,
-      );
-      if (visitsToday >= subscription.maxVisitsPerDay) {
-        throw new AppHttpException(
-          HttpStatus.BAD_REQUEST,
-          ErrorCode.CHECKIN_DAILY_LIMIT,
-          'Daily visit limit reached',
-        );
-      }
-
-      let usedGrace = false;
-      let status = subscription.status;
-      let sessionsRemaining = subscription.sessionsRemaining;
-
-      if (status === 'EXPIRED') {
-        await tx.subscription.update({
-          where: { id: subscription.id },
-          data: {
-            status: 'IN_GRACE',
-            graceUsedAt: now,
-            graceEndsAt: accessUntilOf(subscription.endsAt, graceDays),
-          },
-        });
-        await this.subscriptionsRepository.recordLifecycleNotifications(
-          tx,
-          actor.tenantId,
-          'SUBSCRIPTION_IN_GRACE',
-          [
-            {
-              id: subscription.id,
-              memberId: subscription.memberId,
-              planName: subscription.planName,
-              member: subscription.member,
-            },
-          ],
-        );
-        usedGrace = true;
-        status = 'IN_GRACE';
-      }
-
-      if (sessionsRemaining !== null) {
-        sessionsRemaining = sessionsRemaining - 1;
-        await tx.subscription.update({
-          where: { id: subscription.id },
-          data: { sessionsRemaining },
-        });
-      }
-
-      const row = await tx.checkIn.create({
-        data: {
-          tenantId: actor.tenantId,
-          memberId: data.memberId,
-          subscriptionId: subscription.id,
-          branchId: data.branchId,
-          staffId: actor.id,
-          checkedInAt: now,
-        },
-        include: CHECKIN_INCLUDE,
-      });
-
-      return toPublicCheckIn(row, {
-        usedGrace,
-        status,
-        sessionsRemaining,
-        visitsToday: visitsToday + 1,
-      });
+      return byCode;
+    }
+    return tx.member.findFirst({
+      where: { id: data.memberId, tenantId },
+      select: { id: true, status: true },
     });
   }
 
@@ -310,6 +365,138 @@ export class CheckInsRepository {
     return eligible[0];
   }
 
+  private isPersistedDoorBlock(result: unknown): result is PersistedDoorBlock {
+    return (
+      typeof result === 'object' &&
+      result !== null &&
+      'doorBlocked' in result &&
+      (result as PersistedDoorBlock).doorBlocked === true
+    );
+  }
+
+  private async persistBranchBlockIfNeeded(
+    tx: Prisma.TransactionClient,
+    actor: AuthenticatedUser,
+    data: CreateCheckInDto,
+    candidates: DoorSubscription[],
+    branch: { id: string; name: string },
+    now: Date,
+    graceDays: number,
+    paymentGate: DoorPaymentGate,
+  ): Promise<PersistedDoorBlock | null> {
+    if (data.subscriptionId) {
+      const code = this.doorDenial(
+        candidates[0],
+        data.branchId,
+        now,
+        graceDays,
+        paymentGate,
+      );
+      if (code !== ErrorCode.CHECKIN_BRANCH_NOT_ALLOWED) {
+        return null;
+      }
+      await this.recordBranchBlockedAttempts(
+        tx,
+        actor,
+        [candidates[0]],
+        branch,
+        now,
+        graceDays,
+        paymentGate,
+      );
+      return {
+        doorBlocked: true,
+        code,
+        minPercent: paymentGate.minPercent,
+      };
+    }
+
+    const eligible = candidates.filter(
+      (row) =>
+        this.doorDenial(row, data.branchId, now, graceDays, paymentGate) ===
+        null,
+    );
+    if (eligible.length > 0) {
+      return null;
+    }
+
+    await this.recordBranchBlockedAttempts(
+      tx,
+      actor,
+      candidates,
+      branch,
+      now,
+      graceDays,
+      paymentGate,
+    );
+
+    const otherwiseOk = candidates.some(
+      (row) =>
+        this.doorDenial(row, data.branchId, now, graceDays, {
+          ...paymentGate,
+          required: false,
+        }) === null,
+    );
+    return {
+      doorBlocked: true,
+      code:
+        otherwiseOk && paymentGate.required
+          ? ErrorCode.CHECKIN_PAYMENT_REQUIRED
+          : ErrorCode.CHECKIN_NO_SUBSCRIPTION,
+      minPercent: paymentGate.minPercent,
+    };
+  }
+
+  private async recordBranchBlockedAttempts(
+    tx: Prisma.TransactionClient,
+    actor: AuthenticatedUser,
+    rows: DoorSubscription[],
+    branch: { id: string; name: string },
+    now: Date,
+    graceDays: number,
+    paymentGate: DoorPaymentGate,
+  ): Promise<void> {
+    const blocked = rows.filter(
+      (row) =>
+        this.doorDenial(row, branch.id, now, graceDays, paymentGate) ===
+        ErrorCode.CHECKIN_BRANCH_NOT_ALLOWED,
+    );
+    if (blocked.length === 0) {
+      return;
+    }
+
+    await tx.notification.createMany({
+      data: blocked.map((row) => ({
+        id: randomUUID(),
+        tenantId: actor.tenantId,
+        type: 'CHECKIN_BRANCH_BLOCKED',
+        subscriptionId: row.id,
+        memberId: row.memberId,
+        memberName: row.member.name,
+        planName: row.planName,
+        branchName: branch.name,
+      })),
+      skipDuplicates: true,
+    });
+
+    await tx.auditEvent.createMany({
+      data: blocked.map((row) => ({
+        tenantId: actor.tenantId,
+        staffId: actor.id,
+        action: 'CHECK_IN_BLOCKED',
+        entityType: 'subscription',
+        entityId: row.id,
+        metadata: {
+          reason: ErrorCode.CHECKIN_BRANCH_NOT_ALLOWED,
+          memberId: row.memberId,
+          branchId: branch.id,
+          branchName: branch.name,
+          planName: row.planName,
+        },
+      })),
+    });
+  }
+
   private assertDoorAccess(
     row: DoorSubscription,
     branchId: string,
@@ -321,6 +508,10 @@ export class CheckInsRepository {
     if (!code) {
       return row;
     }
+    this.throwDoorAccess(code, paymentGate.minPercent);
+  }
+
+  private throwDoorAccess(code: ErrorCode, minPercent: number): never {
     const messages: Record<string, string> = {
       [ErrorCode.SUBSCRIPTION_FROZEN]: 'Frozen subscriptions cannot check in',
       [ErrorCode.SUBSCRIPTION_NOT_ACTIVE]:
@@ -331,7 +522,9 @@ export class CheckInsRepository {
       [ErrorCode.CHECKIN_NO_SESSIONS]: 'No sessions remaining',
       [ErrorCode.CHECKIN_BRANCH_NOT_ALLOWED]:
         'This plan is not allowed at this branch',
-      [ErrorCode.CHECKIN_PAYMENT_REQUIRED]: `Payment of at least ${paymentGate.minPercent}% of the plan price is required to check in`,
+      [ErrorCode.CHECKIN_NO_SUBSCRIPTION]:
+        'No subscription allows this check-in',
+      [ErrorCode.CHECKIN_PAYMENT_REQUIRED]: `Payment of at least ${minPercent}% of the plan price is required to check in`,
     };
     throw new AppHttpException(
       HttpStatus.BAD_REQUEST,

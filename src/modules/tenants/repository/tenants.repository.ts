@@ -7,6 +7,8 @@ import { AppHttpException } from '../../../common/errors/app-http.exception';
 import { PrismaService } from '../../../database/prisma.service';
 import { STAFF_PUBLIC_SELECT } from '../../staff/constants/staff.constants';
 import {
+  BRANCH_FILTER_FIELDS,
+  BRANCH_PUBLIC_SELECT,
   BRANCH_SEARCH_FIELDS,
   BRANCH_SORT_FIELDS,
   TENANT_FILTER_FIELDS,
@@ -133,6 +135,58 @@ export class TenantsRepository {
     return this.prisma.withPlatform((tx) =>
       tx.branch.create({
         data: { tenantId, ...dto },
+        select: BRANCH_PUBLIC_SELECT,
+      }),
+    );
+  }
+
+  createBranch(tenantId: string, name: string) {
+    return this.prisma.withTenant(tenantId, (tx) =>
+      tx.branch.create({
+        data: { tenantId, name },
+        select: BRANCH_PUBLIC_SELECT,
+      }),
+    );
+  }
+
+  findBranchById(tenantId: string, id: string) {
+    return this.prisma.withTenant(tenantId, (tx) =>
+      tx.branch.findFirst({
+        where: { id, tenantId },
+        select: BRANCH_PUBLIC_SELECT,
+      }),
+    );
+  }
+
+  updateBranch(
+    tenantId: string,
+    id: string,
+    data: { name?: string; status?: 'ACTIVE' | 'ARCHIVED' },
+  ) {
+    return this.prisma.withTenant(tenantId, (tx) =>
+      tx.branch.update({
+        where: { id },
+        data,
+        select: BRANCH_PUBLIC_SELECT,
+      }),
+    );
+  }
+
+  countActiveBranches(tenantId: string) {
+    return this.prisma.withTenant(tenantId, (tx) =>
+      tx.branch.count({ where: { tenantId, status: 'ACTIVE' } }),
+    );
+  }
+
+  countActiveStaffOnBranch(tenantId: string, branchId: string) {
+    return this.prisma.withTenant(tenantId, (tx) =>
+      tx.staff.count({
+        where: {
+          tenantId,
+          branchId,
+          status: 'ACTIVE',
+          role: 'BRANCH_STAFF',
+        },
       }),
     );
   }
@@ -163,6 +217,7 @@ export class TenantsRepository {
     const features = new ApiFeatures(
       query as unknown as Record<string, unknown>,
     )
+      .filter(BRANCH_FILTER_FIELDS)
       .search(BRANCH_SEARCH_FIELDS)
       .sort(BRANCH_SORT_FIELDS)
       .paginate();
@@ -180,12 +235,7 @@ export class TenantsRepository {
           orderBy: orderBy as Prisma.BranchOrderByWithRelationInput[],
           skip,
           take,
-          select: {
-            id: true,
-            tenantId: true,
-            name: true,
-            createdAt: true,
-          },
+          select: BRANCH_PUBLIC_SELECT,
         }),
         tx.branch.count({ where: scopedWhere }),
       ]);

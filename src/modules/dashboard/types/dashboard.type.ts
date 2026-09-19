@@ -20,7 +20,7 @@ export type PublicDashboard = {
   checkIns: {
     total: number;
     uniqueMembers: number;
-    byBranch: { id: string; name: string; count: number }[];
+    byBranch: { id: string; name: string; status: string; count: number }[];
   };
   collected: {
     amount: number;

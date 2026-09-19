@@ -109,10 +109,28 @@ describe('Members (e2e)', () => {
       .expect(201);
 
     expect(created.body.phone).toBe('+201001234567');
+    expect(created.body.code).toMatch(/^[2-9A-HJ-NP-Z]{8}$/);
     expect(created.body.tenantId).toBe(gymA.body.id);
     expect(created.body.homeBranchId).toBe(branchA);
     expect(created.body.homeBranch).toEqual({ id: branchA, name: 'Maadi' });
     expect(created.body.status).toBe('ACTIVE');
+
+    const byCode = await request(app.getHttpServer())
+      .get(`/api/v1/members?code=${created.body.code.toLowerCase()}`)
+      .set('Authorization', `Bearer ${tokenA}`)
+      .expect(200);
+    expect(byCode.body.total).toBe(1);
+    expect(byCode.body.data[0].id).toBe(created.body.id);
+
+    const bySearch = await request(app.getHttpServer())
+      .get(`/api/v1/members?search=${created.body.code}`)
+      .set('Authorization', `Bearer ${tokenA}`)
+      .expect(200);
+    expect(
+      bySearch.body.data.some(
+        (row: { id: string }) => row.id === created.body.id,
+      ),
+    ).toBe(true);
 
     const duplicate = await request(app.getHttpServer())
       .post('/api/v1/members')
@@ -155,6 +173,12 @@ describe('Members (e2e)', () => {
       .get(`/api/v1/members/${created.body.id}`)
       .set('Authorization', `Bearer ${loginB.body.accessToken}`)
       .expect(404);
+
+    const otherGymCode = await request(app.getHttpServer())
+      .get(`/api/v1/members?code=${created.body.code}`)
+      .set('Authorization', `Bearer ${loginB.body.accessToken}`)
+      .expect(200);
+    expect(otherGymCode.body.total).toBe(0);
 
     const samePhoneOtherGym = await request(app.getHttpServer())
       .post('/api/v1/members')
