@@ -8,6 +8,7 @@ describe('endingSoonWhere', () => {
     const now = new Date('2026-09-19T07:00:00.000Z');
     expect(endingSoonWhere(now)).toEqual({
       status: SubscriptionStatus.ACTIVE,
+      kind: { not: 'DAY_PASS' },
       endsAt: {
         gte: now,
         lte: addUtcDays(now, SUBSCRIPTION_ENDING_SOON_DAYS),

@@ -213,7 +213,7 @@ describe('Reports (e2e)', () => {
       /attachment; filename="subscriptions-\d{4}-\d{2}-\d{2}\.csv"/,
     );
     expect(subscriptionsCsv.text).toContain(
-      'member,memberPhone,memberStatus,plan',
+      'member,memberPhone,memberStatus,plan,kind',
     );
     expect(subscriptionsCsv.text).toContain('Gold 30');
     expect(subscriptionsCsv.text).toContain('Ahmed Hassan');

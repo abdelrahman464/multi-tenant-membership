@@ -19,6 +19,7 @@ export type PublicPlan = {
   price: number;
   currency: string;
   allBranches: boolean;
+  kind: PlanRow['kind'];
   status: PlanRow['status'];
   branches: { id: string; name: string }[];
   createdAt: Date;
@@ -36,6 +37,7 @@ export function toPublicPlan(plan: PlanRow): PublicPlan {
     price: Number(plan.price),
     currency: plan.tenant.currency,
     allBranches: plan.allBranches,
+    kind: plan.kind,
     status: plan.status,
     branches: plan.branches
       .map((link) => link.branch)

@@ -125,6 +125,22 @@ describe('Dashboard (e2e)', () => {
       .send({ status: 'ARCHIVED' })
       .expect(200);
 
+    const blocked = await request(app.getHttpServer())
+      .post('/api/v1/members')
+      .set('Authorization', `Bearer ${tokenA}`)
+      .send({
+        name: 'Blocked Member',
+        phone: '+201005550003',
+        homeBranchId: branchA,
+      })
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .patch(`/api/v1/members/${blocked.body.id}`)
+      .set('Authorization', `Bearer ${tokenA}`)
+      .send({ status: 'BLOCKED' })
+      .expect(200);
+
     const memberB = await request(app.getHttpServer())
       .post('/api/v1/members')
       .set('Authorization', `Bearer ${tokenB}`)
@@ -208,7 +224,8 @@ describe('Dashboard (e2e)', () => {
     expect(dashA.body.members).toEqual({
       active: 1,
       archived: 1,
-      joined: 2,
+      blocked: 1,
+      joined: 3,
     });
     expect(dashA.body.subscriptions).toEqual({
       active: 1,
@@ -258,6 +275,7 @@ describe('Dashboard (e2e)', () => {
 
     expect(dashB.body.members.active).toBe(1);
     expect(dashB.body.members.archived).toBe(0);
+    expect(dashB.body.members.blocked).toBe(0);
     expect(dashB.body.subscriptions.active).toBe(1);
     expect(dashB.body.subscriptions.completedUnrenewed).toBe(0);
     expect(dashB.body.checkIns.total).toBe(0);

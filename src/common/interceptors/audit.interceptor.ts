@@ -11,6 +11,10 @@ import { AUDIT_KEY, AuditOptions } from '../decorators/audit.decorator';
 import { extractClientMeta } from '../../modules/auth/utils/extract-client-meta.util';
 import { AuthenticatedUser } from '../types/authenticated-user.type';
 import { AuditRepository } from '../../modules/audit/repository/audit.repository';
+import {
+  mergeAuditMetadata,
+  pickBodyMetadata,
+} from '../utils/audit-metadata.util';
 
 @Injectable()
 export class AuditInterceptor implements NestInterceptor {
@@ -57,7 +61,10 @@ export class AuditInterceptor implements NestInterceptor {
       action: options.action,
       entityType: options.entityType ?? null,
       entityId: entityIdOf(body, req.params?.id),
-      metadata: options.metadata ?? null,
+      metadata: mergeAuditMetadata(
+        options.metadata,
+        pickBodyMetadata(body, options.metadataFromBody),
+      ),
       ip: meta.ip,
       userAgent: meta.userAgent,
     });
@@ -83,9 +90,14 @@ function staffFromBody(
 }
 
 function entityIdOf(body: unknown, paramId?: string | string[]): string | null {
-  if (body && typeof body === 'object' && 'id' in body) {
-    const id = (body as { id?: unknown }).id;
-    if (typeof id === 'string') return id;
+  if (body && typeof body === 'object') {
+    if ('id' in body && typeof (body as { id?: unknown }).id === 'string') {
+      return (body as { id: string }).id;
+    }
+    const nested = (body as { subscription?: { id?: unknown } }).subscription;
+    if (nested && typeof nested.id === 'string') {
+      return nested.id;
+    }
   }
   return typeof paramId === 'string' ? paramId : null;
 }

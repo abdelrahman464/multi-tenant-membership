@@ -213,6 +213,30 @@ describe('Members (e2e)', () => {
 
     expect(samePhoneOtherGym.body.tenantId).toBe(gymB.body.id);
 
+    const blocked = await request(app.getHttpServer())
+      .patch(`/api/v1/members/${created.body.id}`)
+      .set('Authorization', `Bearer ${tokenA}`)
+      .send({ status: 'BLOCKED' })
+      .expect(200);
+    expect(blocked.body.status).toBe('BLOCKED');
+
+    const blockedList = await request(app.getHttpServer())
+      .get('/api/v1/members?status=BLOCKED')
+      .set('Authorization', `Bearer ${tokenA}`)
+      .expect(200);
+    expect(
+      blockedList.body.data.some(
+        (row: { id: string }) => row.id === created.body.id,
+      ),
+    ).toBe(true);
+
+    const restored = await request(app.getHttpServer())
+      .patch(`/api/v1/members/${created.body.id}`)
+      .set('Authorization', `Bearer ${tokenA}`)
+      .send({ status: 'ACTIVE' })
+      .expect(200);
+    expect(restored.body.status).toBe('ACTIVE');
+
     const archived = await request(app.getHttpServer())
       .patch(`/api/v1/members/${created.body.id}`)
       .set('Authorization', `Bearer ${tokenA}`)

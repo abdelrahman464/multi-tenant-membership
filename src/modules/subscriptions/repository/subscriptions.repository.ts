@@ -20,6 +20,11 @@ import {
 import { expiryCutoff, graceDaysFromSettings } from '../utils/access.util';
 import { endingSoonWhere } from '../utils/ending-soon.util';
 import { addUtcDays, freezeDaysUsedThisYear } from '../utils/freeze.util';
+import { soldPlanEndsAt } from '../utils/sold-plan-ends.util';
+import {
+  assertMemberCanBeSold,
+  memberOnBooksWhere,
+} from '../../members/utils/member-access.util';
 
 @Injectable()
 export class SubscriptionsRepository {
@@ -87,13 +92,7 @@ export class SubscriptionsRepository {
           'Member not found',
         );
       }
-      if (member.status === 'ARCHIVED') {
-        throw new AppHttpException(
-          HttpStatus.BAD_REQUEST,
-          ErrorCode.MEMBER_ARCHIVED,
-          'Archived members cannot join a plan',
-        );
-      }
+      assertMemberCanBeSold(member.status);
 
       const plan = await tx.plan.findFirst({
         where: { id: data.planId, tenantId: actor.tenantId },
@@ -128,6 +127,13 @@ export class SubscriptionsRepository {
       });
       if (!subscription) {
         return null;
+      }
+      if (subscription.kind === 'DAY_PASS') {
+        throw new AppHttpException(
+          HttpStatus.BAD_REQUEST,
+          ErrorCode.DAY_PASS_NO_FREEZE,
+          'Day passes cannot be frozen',
+        );
       }
       if (
         subscription.status === 'CANCELLED' ||
@@ -298,13 +304,14 @@ export class SubscriptionsRepository {
         where: { id: subscription.memberId, tenantId: actor.tenantId },
         select: { id: true, status: true },
       });
-      if (!member || member.status === 'ARCHIVED') {
+      if (!member) {
         throw new AppHttpException(
           HttpStatus.BAD_REQUEST,
           ErrorCode.MEMBER_ARCHIVED,
           'Archived members cannot join a plan',
         );
       }
+      assertMemberCanBeSold(member.status);
 
       const plan = await tx.plan.findFirst({
         where: { id: subscription.planId, tenantId: actor.tenantId },
@@ -390,13 +397,14 @@ export class SubscriptionsRepository {
     });
   }
 
-  private async insertSoldPlan(
+  async insertSoldPlan(
     tx: Prisma.TransactionClient,
     tenantId: string,
     memberId: string,
     plan: {
       id: string;
       name: string;
+      kind: string;
       durationDays: number;
       sessionCount: number | null;
       maxVisitsPerDay: number;
@@ -406,6 +414,11 @@ export class SubscriptionsRepository {
     soldByStaffId: string,
     now = new Date(),
   ) {
+    const tenant = await tx.tenant.findUnique({
+      where: { id: tenantId },
+      select: { timezone: true },
+    });
+    const timeZone = tenant?.timezone ?? 'Africa/Cairo';
     const row = await tx.subscription.create({
       data: {
         tenantId,
@@ -413,6 +426,7 @@ export class SubscriptionsRepository {
         planId: plan.id,
         soldByStaffId,
         planName: plan.name,
+        kind: plan.kind === 'DAY_PASS' ? 'DAY_PASS' : 'MEMBERSHIP',
         durationDays: plan.durationDays,
         sessionCount: plan.sessionCount,
         sessionsRemaining: plan.sessionCount,
@@ -420,7 +434,7 @@ export class SubscriptionsRepository {
         price: plan.price,
         allBranches: plan.allBranches,
         startsAt: now,
-        endsAt: addUtcDays(now, plan.durationDays),
+        endsAt: soldPlanEndsAt(plan.kind, now, plan.durationDays, timeZone),
       },
       include: SUBSCRIPTION_INCLUDE,
     });
@@ -653,7 +667,7 @@ export class SubscriptionsRepository {
         tenantId,
         status: { not: SubscriptionStatus.CANCELLED },
         price: { gt: 0 },
-        member: { status: 'ACTIVE' },
+        member: memberOnBooksWhere,
       },
       select: { id: true, price: true },
     });
@@ -676,7 +690,7 @@ export class SubscriptionsRepository {
   ): Promise<string[]> {
     const rows = await this.lifecycleRows(tx, tenantId);
     return rows
-      .filter((row) => row.member.status === 'ACTIVE' && isInProgress(row))
+      .filter((row) => row.member.status !== 'ARCHIVED' && isInProgress(row))
       .map((row) => row.id);
   }
 
@@ -688,7 +702,7 @@ export class SubscriptionsRepository {
       where: {
         tenantId,
         status: SubscriptionStatus.EXPIRED,
-        member: { status: 'ACTIVE' },
+        member: memberOnBooksWhere,
       },
       select: { id: true },
     });
@@ -724,7 +738,11 @@ export class SubscriptionsRepository {
     }
     const latestIds = new Set([...latest.values()].map((row) => row.id));
     return rows
-      .filter((row) => latestIds.has(row.id) && isFinished(row))
+      .filter((row) => {
+        return (
+          row.kind !== 'DAY_PASS' && latestIds.has(row.id) && isFinished(row)
+        );
+      })
       .map((row) => row.id);
   }
 
@@ -739,6 +757,7 @@ export class SubscriptionsRepository {
         status: true,
         sessionCount: true,
         sessionsRemaining: true,
+        kind: true,
         member: { select: { status: true } },
       },
     });
@@ -797,9 +816,7 @@ export class SubscriptionsRepository {
 }
 
 type LifecycleNotificationType =
-  | 'SUBSCRIPTION_IN_GRACE'
-  | 'SUBSCRIPTION_EXPIRED'
-  | 'SUBSCRIPTION_ENDING_SOON';
+  'SUBSCRIPTION_IN_GRACE' | 'SUBSCRIPTION_EXPIRED' | 'SUBSCRIPTION_ENDING_SOON';
 
 function asAnd(
   value: Prisma.SubscriptionWhereInput['AND'],
@@ -822,6 +839,7 @@ type LifecycleRow = {
   planId: string;
   createdAt: Date;
   status: SubscriptionStatus;
+  kind: string;
   sessionCount: number | null;
   sessionsRemaining: number | null;
 };

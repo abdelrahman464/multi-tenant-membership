@@ -154,6 +154,7 @@ export class ReportsRepository {
           ? { cancelledByStaffId: query.cancelledByStaffId }
           : {}),
         ...(query.status ? { status: query.status } : {}),
+        ...(query.kind ? { kind: query.kind } : {}),
       };
       const deskIds = await this.subscriptionsRepository.deskListIds(
         tx,
@@ -182,6 +183,7 @@ export class ReportsRepository {
           id: true,
           status: true,
           planName: true,
+          kind: true,
           durationDays: true,
           sessionCount: true,
           sessionsRemaining: true,

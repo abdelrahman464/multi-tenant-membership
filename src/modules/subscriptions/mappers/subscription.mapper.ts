@@ -5,6 +5,7 @@ import {
   graceDaysFromSettings,
   isCalendarGrace,
 } from '../utils/access.util';
+import { graceDaysForSoldPlan } from '../utils/sold-plan-ends.util';
 
 export type SubscriptionRow = Prisma.SubscriptionGetPayload<{
   include: typeof SUBSCRIPTION_INCLUDE;
@@ -15,6 +16,7 @@ export type PublicSubscription = {
   memberId: string;
   planId: string;
   planName: string;
+  kind: SubscriptionRow['kind'];
   durationDays: number;
   sessionCount: number | null;
   sessionsRemaining: number | null;
@@ -53,7 +55,10 @@ export function toPublicSubscription(
   now = new Date(),
   extras: { paidTotal: number } = { paidTotal: 0 },
 ): PublicSubscription {
-  const graceDays = graceDaysFromSettings(row.tenant.settings);
+  const graceDays = graceDaysForSoldPlan(
+    row.kind,
+    graceDaysFromSettings(row.tenant.settings),
+  );
   const accessUntil = accessUntilOf(row.endsAt, graceDays);
   const inGrace =
     row.status === 'IN_GRACE' ||
@@ -69,6 +74,7 @@ export function toPublicSubscription(
     memberId: row.memberId,
     planId: row.planId,
     planName: row.planName,
+    kind: row.kind,
     durationDays: row.durationDays,
     sessionCount: row.sessionCount,
     sessionsRemaining: row.sessionsRemaining,

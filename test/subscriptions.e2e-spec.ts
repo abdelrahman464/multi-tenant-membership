@@ -465,6 +465,25 @@ describe('Subscriptions (e2e)', () => {
     await request(app.getHttpServer())
       .patch(`/api/v1/members/${member.body.id}`)
       .set('Authorization', `Bearer ${tokenA}`)
+      .send({ status: 'BLOCKED' })
+      .expect(200);
+
+    const blockedMember = await request(app.getHttpServer())
+      .post('/api/v1/subscriptions')
+      .set('Authorization', `Bearer ${tokenA}`)
+      .send({ memberId: member.body.id, planId: pack.body.id })
+      .expect(400);
+    expect(blockedMember.body.code).toBe(ErrorCode.MEMBER_BLOCKED);
+
+    const unpaidWhileBlocked = await request(app.getHttpServer())
+      .get('/api/v1/subscriptions?unpaid=true')
+      .set('Authorization', `Bearer ${tokenA}`)
+      .expect(200);
+    expect(unpaidWhileBlocked.body.total).toBeGreaterThan(0);
+
+    await request(app.getHttpServer())
+      .patch(`/api/v1/members/${member.body.id}`)
+      .set('Authorization', `Bearer ${tokenA}`)
       .send({ status: 'ARCHIVED' })
       .expect(200);
 

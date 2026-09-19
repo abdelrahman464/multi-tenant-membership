@@ -15,6 +15,7 @@ import {
   MinLength,
   ValidateIf,
 } from 'class-validator';
+import { PlanKind } from '../enums/plan-kind.enum';
 import { PlanStatus } from '../enums/plan-status.enum';
 
 export class UpdatePlanDto {
@@ -55,6 +56,10 @@ export class UpdatePlanDto {
   @Min(0)
   @Max(99_999_999.99)
   price?: number;
+
+  @IsOptional()
+  @IsEnum(PlanKind)
+  kind?: PlanKind;
 
   @IsOptional()
   @IsBoolean()

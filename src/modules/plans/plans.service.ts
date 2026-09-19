@@ -5,7 +5,9 @@ import { AuthenticatedUser } from '../../common/types/authenticated-user.type';
 import { CreatePlanDto } from './dto/create-plan.dto';
 import { ListPlansQueryDto } from './dto/list-plans-query.dto';
 import { UpdatePlanDto } from './dto/update-plan.dto';
+import { PlanKind } from './enums/plan-kind.enum';
 import { PlansRepository } from './repository/plans.repository';
+import { resolvePlanTerms } from './utils/day-pass-terms.util';
 
 @Injectable()
 export class PlansService {
@@ -29,8 +31,13 @@ export class PlansService {
 
   async create(actor: AuthenticatedUser, dto: CreatePlanDto) {
     const allBranches = dto.allBranches !== false;
-    const sessionCount = dto.sessionCount ?? null;
     const branchIds = dto.branchIds ?? [];
+    const terms = resolvePlanTerms({
+      kind: dto.kind ?? PlanKind.MEMBERSHIP,
+      durationDays: dto.durationDays,
+      sessionCount: dto.sessionCount,
+      maxVisitsPerDay: dto.maxVisitsPerDay,
+    });
 
     this.assertBranchScope({
       allBranches,
@@ -41,11 +48,12 @@ export class PlansService {
     try {
       return await this.plansRepository.create(actor.tenantId, {
         name: dto.name,
-        durationDays: dto.durationDays,
-        sessionCount,
-        maxVisitsPerDay: dto.maxVisitsPerDay ?? 1,
+        durationDays: terms.durationDays,
+        sessionCount: terms.sessionCount,
+        maxVisitsPerDay: terms.maxVisitsPerDay,
         price: dto.price,
         allBranches,
+        kind: terms.kind,
         branchIds,
       });
     } catch (error) {
@@ -67,6 +75,17 @@ export class PlansService {
     }
 
     const allBranches = dto.allBranches ?? existing.allBranches;
+    const nextKind = dto.kind ?? existing.kind;
+    const terms =
+      nextKind === PlanKind.DAY_PASS
+        ? resolvePlanTerms({
+            kind: PlanKind.DAY_PASS,
+            durationDays: dto.durationDays,
+            sessionCount: dto.sessionCount,
+            maxVisitsPerDay: dto.maxVisitsPerDay ?? existing.maxVisitsPerDay,
+          })
+        : null;
+
     this.assertBranchScope({
       allBranches,
       branchIds: dto.branchIds,
@@ -76,11 +95,12 @@ export class PlansService {
     try {
       return await this.plansRepository.update(actor.tenantId, id, {
         name: dto.name,
-        durationDays: dto.durationDays,
-        sessionCount: dto.sessionCount,
-        maxVisitsPerDay: dto.maxVisitsPerDay,
+        durationDays: terms?.durationDays ?? dto.durationDays,
+        sessionCount: terms ? terms.sessionCount : dto.sessionCount,
+        maxVisitsPerDay: terms?.maxVisitsPerDay ?? dto.maxVisitsPerDay,
         price: dto.price,
         allBranches: dto.allBranches,
+        kind: dto.kind,
         branchIds: dto.branchIds,
         status: dto.status,
       });

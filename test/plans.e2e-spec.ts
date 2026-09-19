@@ -135,6 +135,42 @@ describe('Plans (e2e)', () => {
     expect(monthly.body.branches).toEqual([]);
     expect(monthly.body.tenantId).toBe(gymA.body.id);
     expect(monthly.body.status).toBe('ACTIVE');
+    expect(monthly.body.kind).toBe('MEMBERSHIP');
+
+    const dayPass = await request(app.getHttpServer())
+      .post('/api/v1/plans')
+      .set('Authorization', `Bearer ${tokenA}`)
+      .send({
+        name: 'Walk-in day',
+        kind: 'DAY_PASS',
+        price: 150,
+      })
+      .expect(201);
+    expect(dayPass.body.kind).toBe('DAY_PASS');
+    expect(dayPass.body.durationDays).toBe(1);
+    expect(dayPass.body.sessionCount).toBe(1);
+
+    const badDayPass = await request(app.getHttpServer())
+      .post('/api/v1/plans')
+      .set('Authorization', `Bearer ${tokenA}`)
+      .send({
+        name: 'Fake day',
+        kind: 'DAY_PASS',
+        durationDays: 30,
+        price: 150,
+      })
+      .expect(400);
+    expect(badDayPass.body.code).toBe(ErrorCode.PLAN_DAY_PASS_TERMS);
+
+    const dayPassList = await request(app.getHttpServer())
+      .get('/api/v1/plans?kind=DAY_PASS')
+      .set('Authorization', `Bearer ${tokenA}`)
+      .expect(200);
+    expect(
+      dayPassList.body.data.every(
+        (row: { kind: string }) => row.kind === 'DAY_PASS',
+      ),
+    ).toBe(true);
 
     const duplicate = await request(app.getHttpServer())
       .post('/api/v1/plans')

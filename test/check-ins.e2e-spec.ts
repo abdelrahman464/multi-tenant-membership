@@ -622,5 +622,66 @@ describe('Check-ins (e2e)', () => {
       .set('Authorization', `Bearer ${token}`)
       .send({ hoursExceptions: null })
       .expect(200);
+
+    const beforeBlock = await request(app.getHttpServer())
+      .get(`/api/v1/members/${member.body.id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+
+    await request(app.getHttpServer())
+      .patch(`/api/v1/members/${member.body.id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ status: 'BLOCKED' })
+      .expect(200);
+
+    const blockedDoor = await request(app.getHttpServer())
+      .post('/api/v1/checkIns')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        memberId: member.body.id,
+        branchId,
+        subscriptionId: paid.body.id,
+      })
+      .expect(400);
+    expect(blockedDoor.body.code).toBe(ErrorCode.MEMBER_BLOCKED);
+
+    const afterBlock = await request(app.getHttpServer())
+      .get(`/api/v1/members/${member.body.id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+    expect(afterBlock.body.lastCheckedInAt).toBe(
+      beforeBlock.body.lastCheckedInAt,
+    );
+
+    const blockedSale = await request(app.getHttpServer())
+      .post('/api/v1/subscriptions')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ memberId: member.body.id, planId: free.body.id })
+      .expect(400);
+    expect(blockedSale.body.code).toBe(ErrorCode.MEMBER_BLOCKED);
+
+    await request(app.getHttpServer())
+      .post('/api/v1/payments')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        subscriptionId: paid.body.id,
+        branchId,
+        method: 'CASH',
+        amount: 50,
+      })
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .patch(`/api/v1/members/${member.body.id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ status: 'ACTIVE' })
+      .expect(200);
+
+    const restoredSale = await request(app.getHttpServer())
+      .post('/api/v1/subscriptions')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ memberId: member.body.id, planId: free.body.id })
+      .expect(201);
+    expect(restoredSale.body.planName).toBe('Comp pass');
   });
 });

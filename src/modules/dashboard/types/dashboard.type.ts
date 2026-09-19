@@ -6,6 +6,7 @@ export type PublicDashboard = {
   members: {
     active: number;
     archived: number;
+    blocked: number;
     joined: number;
   };
   subscriptions: {

@@ -89,6 +89,7 @@ export function subscriptionCsvRow(
   row: {
     status: string;
     planName: string;
+    kind: string;
     durationDays: number;
     sessionCount: number | null;
     sessionsRemaining: number | null;
@@ -112,6 +113,7 @@ export function subscriptionCsvRow(
     row.member.phone,
     row.member.status,
     row.planName,
+    row.kind,
     row.staff?.name ?? null,
     row.status,
     row.durationDays,

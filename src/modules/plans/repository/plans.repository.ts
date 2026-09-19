@@ -11,6 +11,7 @@ import {
   PLAN_SORT_FIELDS,
 } from '../constants/plan.constants';
 import { ListPlansQueryDto } from '../dto/list-plans-query.dto';
+import { PlanKind } from '../enums/plan-kind.enum';
 import { PlanStatus } from '../enums/plan-status.enum';
 import { toPublicPlan } from '../mappers/plan.mapper';
 
@@ -21,6 +22,7 @@ export type PersistPlanCreate = {
   maxVisitsPerDay: number;
   price: number;
   allBranches: boolean;
+  kind: PlanKind;
   branchIds: string[];
 };
 
@@ -32,6 +34,7 @@ export type PersistPlanUpdate = {
   price?: number;
   allBranches?: boolean;
   branchIds?: string[];
+  kind?: PlanKind;
   status?: PlanStatus;
 };
 
@@ -108,6 +111,7 @@ export class PlansRepository {
           maxVisitsPerDay: data.maxVisitsPerDay,
           price: data.price,
           allBranches: data.allBranches,
+          kind: data.kind,
           ...(data.allBranches
             ? {}
             : {
@@ -160,6 +164,7 @@ export class PlansRepository {
       }
       if (data.price !== undefined) patch.price = data.price;
       if (data.allBranches !== undefined) patch.allBranches = data.allBranches;
+      if (data.kind !== undefined) patch.kind = data.kind;
       if (data.status !== undefined) patch.status = data.status;
 
       if (data.allBranches === true) {

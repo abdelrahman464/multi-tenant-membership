@@ -9,6 +9,7 @@ import {
   Max,
   Min,
 } from 'class-validator';
+import { PlanKind } from '../enums/plan-kind.enum';
 import { PlanStatus } from '../enums/plan-status.enum';
 
 export class ListPlansQueryDto {
@@ -19,6 +20,10 @@ export class ListPlansQueryDto {
   @IsOptional()
   @IsEnum(PlanStatus)
   status?: PlanStatus;
+
+  @IsOptional()
+  @IsEnum(PlanKind)
+  kind?: PlanKind;
 
   @IsOptional()
   @Transform(({ value }: { value: unknown }) => {

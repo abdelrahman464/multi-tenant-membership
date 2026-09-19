@@ -134,6 +134,7 @@ model Staff {
 enum MemberStatus {
   ACTIVE
   ARCHIVED
+  BLOCKED
 }
 
 /// Gym member. No login in v1. Phone is unique per tenant (E.164).
@@ -174,6 +175,11 @@ enum PlanStatus {
   ARCHIVED
 }
 
+enum PlanKind {
+  MEMBERSHIP
+  DAY_PASS
+}
+
 /// What the gym sells. durationDays is always required.
 /// sessionCount is optional (unlimited visits until the days end, still capped per day).
 /// maxVisitsPerDay is how many check-ins are allowed on one calendar day (enforced at check-in).
@@ -189,6 +195,7 @@ model Plan {
   /// Major units of the tenant currency (EGP for Egypt). Not Stripe.
   price           Decimal    @db.Decimal(12, 2)
   allBranches     Boolean    @default(true) @map("all_branches")
+  kind            PlanKind   @default(MEMBERSHIP)
   status          PlanStatus @default(ACTIVE)
   createdAt       DateTime   @default(now()) @map("created_at")
   updatedAt       DateTime   @updatedAt @map("updated_at")
@@ -198,6 +205,7 @@ model Plan {
 
   @@unique([tenantId, name])
   @@index([tenantId])
+  @@index([tenantId, kind])
   @@map("plans")
 }
 
@@ -237,6 +245,7 @@ model Subscription {
   soldByStaffId      String?            @map("sold_by_staff_id") @db.Uuid
   staff              Staff?             @relation("SubscriptionSoldBy", fields: [soldByStaffId], references: [id], onDelete: Restrict)
   planName           String             @map("plan_name")
+  kind               PlanKind           @default(MEMBERSHIP)
   durationDays       Int                @map("duration_days")
   sessionCount       Int?               @map("session_count")
   sessionsRemaining  Int?               @map("sessions_remaining")
@@ -270,6 +279,7 @@ model Subscription {
   @@index([planId])
   @@index([soldByStaffId])
   @@index([cancelledByStaffId])
+  @@index([tenantId, kind])
   @@index([tenantId, status, endsAt])
   @@map("subscriptions")
 }
@@ -417,6 +427,7 @@ enum AuditAction {
   PAYMENT_VOIDED
   SETTINGS_UPDATED
   REPORT_EXPORTED
+  DAY_PASS_SOLD
 }
 
 /// Who did what at the gym. Writes only (plus CSV export). No passwords or tokens.

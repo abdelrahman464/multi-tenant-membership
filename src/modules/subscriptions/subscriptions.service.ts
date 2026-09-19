@@ -6,13 +6,20 @@ import { CreateSubscriptionDto } from './dto/create-subscription.dto';
 import { CancelSubscriptionDto } from './dto/cancel-subscription.dto';
 import { FreezeSubscriptionDto } from './dto/freeze-subscription.dto';
 import { ListSubscriptionsQueryDto } from './dto/list-subscriptions-query.dto';
+import { SellDayPassDto } from './dto/sell-day-pass.dto';
+import { DayPassesRepository } from './repository/day-passes.repository';
 import { SubscriptionsRepository } from './repository/subscriptions.repository';
 
 @Injectable()
 export class SubscriptionsService {
   constructor(
     private readonly subscriptionsRepository: SubscriptionsRepository,
+    private readonly dayPassesRepository: DayPassesRepository,
   ) {}
+
+  sellDayPass(actor: AuthenticatedUser, dto: SellDayPassDto) {
+    return this.dayPassesRepository.sell(actor, dto);
+  }
 
   list(actor: AuthenticatedUser, query: ListSubscriptionsQueryDto) {
     return this.subscriptionsRepository.findMany(actor.tenantId, query);

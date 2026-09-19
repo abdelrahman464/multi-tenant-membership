@@ -9,6 +9,7 @@ import {
   Max,
   Min,
 } from 'class-validator';
+import { PlanKind } from '../../plans/enums/plan-kind.enum';
 import { SubscriptionStatus } from '../enums/subscription-status.enum';
 
 function toQueryBoolean({ value }: { value: unknown }) {
@@ -37,6 +38,10 @@ export class ListSubscriptionsQueryDto {
   @IsOptional()
   @IsEnum(SubscriptionStatus)
   status?: SubscriptionStatus;
+
+  @IsOptional()
+  @IsEnum(PlanKind)
+  kind?: PlanKind;
 
   /** Remaining due > 0 (zero paid or partial). Active members, not cancelled. */
   @IsOptional()

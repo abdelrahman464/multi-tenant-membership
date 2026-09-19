@@ -1,5 +1,6 @@
 import { Transform } from 'class-transformer';
 import { IsBoolean, IsEnum, IsOptional, IsUUID } from 'class-validator';
+import { PlanKind } from '../../plans/enums/plan-kind.enum';
 import { SubscriptionStatus } from '../../subscriptions/enums/subscription-status.enum';
 
 function toQueryBoolean({ value }: { value: unknown }) {
@@ -28,6 +29,10 @@ export class ExportSubscriptionsQueryDto {
   @IsOptional()
   @IsEnum(SubscriptionStatus)
   status?: SubscriptionStatus;
+
+  @IsOptional()
+  @IsEnum(PlanKind)
+  kind?: PlanKind;
 
   @IsOptional()
   @Transform(toQueryBoolean)

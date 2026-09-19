@@ -1,5 +1,5 @@
 export const PLAN_SEARCH_FIELDS = ['name'] as const;
-export const PLAN_FILTER_FIELDS = ['status', 'allBranches'] as const;
+export const PLAN_FILTER_FIELDS = ['status', 'allBranches', 'kind'] as const;
 export const PLAN_SORT_FIELDS = [
   'createdAt',
   'updatedAt',

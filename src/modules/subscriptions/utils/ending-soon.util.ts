@@ -7,6 +7,7 @@ export function endingSoonWhere(
 ): Prisma.SubscriptionWhereInput {
   return {
     status: SubscriptionStatus.ACTIVE,
+    kind: { not: 'DAY_PASS' },
     endsAt: { gte: now, lte: addUtcDays(now, SUBSCRIPTION_ENDING_SOON_DAYS) },
   };
 }

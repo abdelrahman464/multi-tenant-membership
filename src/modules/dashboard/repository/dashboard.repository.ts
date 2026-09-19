@@ -8,6 +8,7 @@ import {
 import { roundMoney } from '../../payments/mappers/payment.mapper';
 import { endingSoonWhere } from '../../subscriptions/utils/ending-soon.util';
 import { SubscriptionsRepository } from '../../subscriptions/repository/subscriptions.repository';
+import { memberOnBooksWhere } from '../../members/utils/member-access.util';
 import { PublicDashboard } from '../types/dashboard.type';
 
 @Injectable()
@@ -39,6 +40,7 @@ export class DashboardRepository {
       const [
         activeMembers,
         archivedMembers,
+        blockedMembers,
         joined,
         subGroups,
         endingSoon,
@@ -52,6 +54,7 @@ export class DashboardRepository {
       ] = await Promise.all([
         tx.member.count({ where: { tenantId, status: 'ACTIVE' } }),
         tx.member.count({ where: { tenantId, status: 'ARCHIVED' } }),
+        tx.member.count({ where: { tenantId, status: 'BLOCKED' } }),
         tx.member.count({
           where: { tenantId, createdAt: inRange },
         }),
@@ -99,7 +102,7 @@ export class DashboardRepository {
             tenantId,
             status: { not: SubscriptionStatus.CANCELLED },
             price: { gt: 0 },
-            member: { status: 'ACTIVE' },
+            member: memberOnBooksWhere,
           },
           select: { id: true, price: true },
         }),
@@ -125,6 +128,7 @@ export class DashboardRepository {
         members: {
           active: activeMembers,
           archived: archivedMembers,
+          blocked: blockedMembers,
           joined,
         },
         subscriptions: {

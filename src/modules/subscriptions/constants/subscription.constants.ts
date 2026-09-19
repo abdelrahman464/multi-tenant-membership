@@ -7,6 +7,7 @@ export const SUBSCRIPTION_FILTER_FIELDS = [
   'memberId',
   'planId',
   'status',
+  'kind',
   'soldByStaffId',
   'cancelledByStaffId',
 ] as const;

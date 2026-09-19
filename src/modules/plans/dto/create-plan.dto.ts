@@ -3,6 +3,7 @@ import {
   ArrayUnique,
   IsArray,
   IsBoolean,
+  IsEnum,
   IsInt,
   IsNumber,
   IsOptional,
@@ -12,7 +13,9 @@ import {
   MaxLength,
   Min,
   MinLength,
+  ValidateIf,
 } from 'class-validator';
+import { PlanKind } from '../enums/plan-kind.enum';
 
 export class CreatePlanDto {
   @Transform(({ value }: { value: unknown }) =>
@@ -23,12 +26,18 @@ export class CreatePlanDto {
   @MaxLength(120)
   name!: string;
 
-  /** Calendar length in days. Always required. */
+  /** MEMBERSHIP (default) or DAY_PASS (forced 1 day / 1 visit). */
+  @IsOptional()
+  @IsEnum(PlanKind)
+  kind?: PlanKind;
+
+  /** Calendar length in days. Required for memberships. Day pass defaults to 1. */
+  @ValidateIf((dto: CreatePlanDto) => dto.kind !== PlanKind.DAY_PASS)
   @Type(() => Number)
   @IsInt()
   @Min(1)
   @Max(3650)
-  durationDays!: number;
+  durationDays?: number;
 
   /** Optional visit pack. Omit for unlimited visits until durationDays ends. */
   @IsOptional()

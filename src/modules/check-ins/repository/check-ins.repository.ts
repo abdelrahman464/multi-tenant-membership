@@ -12,6 +12,7 @@ import {
   accessUntilOf,
   graceDaysFromSettings,
 } from '../../subscriptions/utils/access.util';
+import { graceDaysForSoldPlan } from '../../subscriptions/utils/sold-plan-ends.util';
 import {
   CHECKIN_FILTER_FIELDS,
   CHECKIN_INCLUDE,
@@ -24,6 +25,7 @@ import { toPublicCheckIn } from '../mappers/check-in.mapper';
 import { zonedYmd } from '../utils/tenant-day.util';
 import { assertBranchOpen } from '../../branches/utils/assert-branch-open.util';
 import { requireActiveBranch } from '../../branches/utils/require-active-branch.util';
+import { assertMemberCanCheckIn } from '../../members/utils/member-access.util';
 
 type DoorSubscription = Prisma.SubscriptionGetPayload<{
   include: {
@@ -139,13 +141,7 @@ export class CheckInsRepository {
             'Member not found',
           );
         }
-        if (member.status === 'ARCHIVED') {
-          throw new AppHttpException(
-            HttpStatus.BAD_REQUEST,
-            ErrorCode.MEMBER_ARCHIVED,
-            'Archived members cannot check in',
-          );
-        }
+        assertMemberCanCheckIn(member.status);
 
         const candidates = await tx.subscription.findMany({
           where: {
@@ -226,7 +222,7 @@ export class CheckInsRepository {
         let status = subscription.status;
         let sessionsRemaining = subscription.sessionsRemaining;
 
-        if (status === 'EXPIRED') {
+        if (status === 'EXPIRED' && subscription.kind !== 'DAY_PASS') {
           await tx.subscription.update({
             where: { id: subscription.id },
             data: {
@@ -564,6 +560,7 @@ export class CheckInsRepository {
     if (row.sessionsRemaining !== null && row.sessionsRemaining <= 0) {
       return ErrorCode.CHECKIN_NO_SESSIONS;
     }
+    const doorGrace = graceDaysForSoldPlan(row.kind, graceDays);
     if (row.status === 'ACTIVE') {
       if (now > row.endsAt) {
         return ErrorCode.CHECKIN_EXPIRED;
@@ -571,7 +568,10 @@ export class CheckInsRepository {
     } else if (row.graceUsedAt && row.status !== 'IN_GRACE') {
       return ErrorCode.CHECKIN_GRACE_USED;
     } else if (row.status === 'EXPIRED' || row.status === 'IN_GRACE') {
-      const until = row.graceEndsAt ?? accessUntilOf(row.endsAt, graceDays);
+      if (row.kind === 'DAY_PASS') {
+        return ErrorCode.CHECKIN_EXPIRED;
+      }
+      const until = row.graceEndsAt ?? accessUntilOf(row.endsAt, doorGrace);
       if (now > until) {
         return ErrorCode.CHECKIN_EXPIRED;
       }
